@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { getCurrentUserRole } from "@/lib/auth/permissions";
+import { getCurrentUserPermissions, getCurrentUserRole } from "@/lib/auth/permissions";
 import { getRoleHomePath } from "@/lib/auth/roles";
 import { getDashboardCardsByRole, getVisibleDashboardRole } from "@/lib/navigation/dashboard";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -21,14 +21,23 @@ function dateIso(date: Date) {
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const params = await searchParams;
   const { userId, role } = await getCurrentUserRole();
+  const permissionContext = await getCurrentUserPermissions();
   const visibleRole = getVisibleDashboardRole(role);
+  console.info("[dashboard] auth context", {
+    userId,
+    role,
+    normalizedRole: permissionContext.normalizedRole,
+    permissionsCount: permissionContext.permissions.length
+  });
 
   if (!userId) {
+    console.warn("[dashboard] no session user, redirecting to /login");
     redirect("/login?error=Debes iniciar sesión.");
   }
 
   if (!visibleRole) {
-    redirect("/login?error=No se encontró perfil de rol para este usuario.");
+    console.warn("[auth][dashboard] authenticated user without visible role", { userId });
+    redirect("/acceso-incompleto?error=No%20se%20encontr%C3%B3%20perfil%20de%20rol%20para%20este%20usuario.");
   }
 
   if (visibleRole === "tecnico") {
@@ -59,125 +68,153 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   let casosRecientes: any[] = [];
   let agendaHoy: any[] = [];
   let proyectosRiesgo: any[] = [];
+  let dashboardDataError: string | null = null;
 
   if (showExecutive) {
-    const supabase = createAdminClient();
-    const [financialResp, overdueAgendaResp, visitasHoyResp, cotizacionesPendResp, ordenesResp, facturasResp, casosResp, agendaResp, projectsResp, overdueTasksResp] =
-      await Promise.all([
-        supabase
-          .from("financial_records")
-          .select(
-            "id, estado_financiero, saldo_por_cobrar, updated_at, case_type, requerimientos(codigo_requerimiento), technical_projects(name)"
-          )
-          .order("updated_at", { ascending: false })
-          .limit(300),
-        supabase
-          .from("agenda_operativa")
-          .select("id", { count: "exact", head: true })
-          .lt("fecha_programada", todayDate)
-          .not("estado_agenda", "in", "(cerrada,no_efectiva)"),
-        supabase
-          .from("agenda_operativa")
-          .select("id", { count: "exact", head: true })
-          .eq("fecha_programada", todayDate),
-        supabase
-          .from("cotizaciones")
-          .select("id", { count: "exact", head: true })
-          .in("estado", ["borrador", "en_revision_interna", "aprobada_internamente", "ajustes_solicitados", "pendiente_aprobacion"]),
-        supabase
-          .from("work_orders")
-          .select("id", { count: "exact", head: true })
-          .in("status", ["programada", "en_progreso"]),
-        supabase.from("invoices").select("id, amount_pending, status").gt("amount_pending", 0),
-        supabase
-          .from("financial_records")
-          .select(
-            "id, updated_at, estado_financiero, case_type, requerimientos(codigo_requerimiento), technical_projects(name), valor_aprobado"
-          )
-          .order("updated_at", { ascending: false })
-          .limit(8),
-        supabase
-          .from("agenda_operativa")
-          .select(
-            "id, fecha_programada, franja_horaria, tipo_visita, estado_agenda, requerimientos(codigo_requerimiento), profiles(full_name)"
-          )
-          .eq("fecha_programada", todayDate)
-          .order("franja_horaria", { ascending: true })
-          .limit(8),
-        supabase
-          .from("technical_projects")
-          .select("id, name, status, priority, planned_end_date, clients(name)")
-          .order("updated_at", { ascending: false })
-          .limit(80),
-        supabase
-          .from("technical_project_tasks")
-          .select("id, project_id, planned_end_date, status")
-          .lt("planned_end_date", todayDate)
-          .not("status", "in", "(completada,finalizada,cerrada)")
-      ]);
+    try {
+      const supabase = createAdminClient();
+      console.info("[dashboard] loading executive kpis");
+      const [financialResp, overdueAgendaResp, visitasHoyResp, cotizacionesPendResp, ordenesResp, facturasResp, casosResp, agendaResp, projectsResp, overdueTasksResp] =
+        await Promise.all([
+          supabase
+            .from("financial_records")
+            .select(
+              "id, estado_financiero, saldo_por_cobrar, updated_at, case_type, requerimientos(codigo_requerimiento), technical_projects(name)"
+            )
+            .order("updated_at", { ascending: false })
+            .limit(300),
+          supabase
+            .from("agenda_operativa")
+            .select("id", { count: "exact", head: true })
+            .lt("fecha_programada", todayDate)
+            .not("estado_agenda", "in", "(cerrada,no_efectiva)"),
+          supabase
+            .from("agenda_operativa")
+            .select("id", { count: "exact", head: true })
+            .eq("fecha_programada", todayDate),
+          supabase
+            .from("cotizaciones")
+            .select("id", { count: "exact", head: true })
+            .in("estado", ["borrador", "en_revision_interna", "aprobada_internamente", "ajustes_solicitados", "pendiente_aprobacion"]),
+          supabase
+            .from("work_orders")
+            .select("id", { count: "exact", head: true })
+            .in("status", ["programada", "en_progreso"]),
+          supabase.from("invoices").select("id, amount_pending, status").gt("amount_pending", 0),
+          supabase
+            .from("financial_records")
+            .select(
+              "id, updated_at, estado_financiero, case_type, requerimientos(codigo_requerimiento), technical_projects(name), valor_aprobado"
+            )
+            .order("updated_at", { ascending: false })
+            .limit(8),
+          supabase
+            .from("agenda_operativa")
+            .select(
+              "id, fecha_programada, franja_horaria, tipo_visita, estado_agenda, requerimientos(codigo_requerimiento), profiles(full_name)"
+            )
+            .eq("fecha_programada", todayDate)
+            .order("franja_horaria", { ascending: true })
+            .limit(8),
+          supabase
+            .from("technical_projects")
+            .select("id, name, status, priority, planned_end_date, clients(name)")
+            .order("updated_at", { ascending: false })
+            .limit(80),
+          supabase
+            .from("technical_project_tasks")
+            .select("id, project_id, planned_end_date, status")
+            .lt("planned_end_date", todayDate)
+            .not("status", "in", "(completada,finalizada,cerrada)")
+        ]);
 
-    const financialRows = financialResp.data ?? [];
-    const projects = projectsResp.data ?? [];
-    const overdueTaskRows = overdueTasksResp.data ?? [];
-    const overdueByProject = overdueTaskRows.reduce(
-      (acc, row: any) => {
-        const key = String(row.project_id ?? "");
-        if (!key) return acc;
-        acc[key] = (acc[key] ?? 0) + 1;
-        return acc;
-      },
-      {} as Record<string, number>
-    );
+      const queryErrors = [
+        financialResp.error,
+        overdueAgendaResp.error,
+        visitasHoyResp.error,
+        cotizacionesPendResp.error,
+        ordenesResp.error,
+        facturasResp.error,
+        casosResp.error,
+        agendaResp.error,
+        projectsResp.error,
+        overdueTasksResp.error
+      ]
+        .filter(Boolean)
+        .map((err: any) => err?.message)
+        .join(" | ");
+      if (queryErrors) {
+        console.error("[dashboard] query errors:", queryErrors);
+        dashboardDataError = "No se pudo cargar parte de los indicadores. Revisa configuración de base de datos y permisos.";
+      }
 
-    const cartera = financialRows.reduce((sum: number, row: any) => sum + Number(row.saldo_por_cobrar ?? 0), 0);
-    const abiertos = financialRows.filter((row: any) => row.estado_financiero !== "cerrado").length;
-    const criticos = projects.filter((project: any) => {
-      const overdueCount = overdueByProject[project.id] ?? 0;
-      const vencido = typeof project.planned_end_date === "string" && project.planned_end_date < todayDate;
-      return overdueCount > 0 || vencido || project.priority === "alta";
-    });
+      const financialRows = financialResp.data ?? [];
+      const projects = projectsResp.data ?? [];
+      const overdueTaskRows = overdueTasksResp.data ?? [];
+      const overdueByProject = overdueTaskRows.reduce(
+        (acc, row: any) => {
+          const key = String(row.project_id ?? "");
+          if (!key) return acc;
+          acc[key] = (acc[key] ?? 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
+      );
 
-    kpis = {
-      casosAbiertos: abiertos,
-      casosVencidos: (overdueAgendaResp.count ?? 0) + overdueTaskRows.length,
-      visitasHoy: visitasHoyResp.count ?? 0,
-      cotizacionesPendientes: cotizacionesPendResp.count ?? 0,
-      ordenesEjecucion: ordenesResp.count ?? 0,
-      facturasPendientes: facturasResp.data?.length ?? 0,
-      carteraPorCobrar: cartera,
-      proyectosCriticos: criticos.length
-    };
+      const cartera = financialRows.reduce((sum: number, row: any) => sum + Number(row.saldo_por_cobrar ?? 0), 0);
+      const abiertos = financialRows.filter((row: any) => row.estado_financiero !== "cerrado").length;
+      const criticos = projects.filter((project: any) => {
+        const overdueCount = overdueByProject[project.id] ?? 0;
+        const vencido = typeof project.planned_end_date === "string" && project.planned_end_date < todayDate;
+        return overdueCount > 0 || vencido || project.priority === "alta";
+      });
 
-    casosRecientes = (casosResp.data ?? []).map((row: any) => ({
-      id: row.id,
-      nombre:
-        (row.requerimientos as { codigo_requerimiento?: string } | null)?.codigo_requerimiento ??
-        (row.technical_projects as { name?: string } | null)?.name ??
-        row.id,
-      tipo: row.case_type,
-      estado: row.estado_financiero,
-      valor: Number(row.valor_aprobado ?? 0),
-      updated_at: row.updated_at
-    }));
+      kpis = {
+        casosAbiertos: abiertos,
+        casosVencidos: (overdueAgendaResp.count ?? 0) + overdueTaskRows.length,
+        visitasHoy: visitasHoyResp.count ?? 0,
+        cotizacionesPendientes: cotizacionesPendResp.count ?? 0,
+        ordenesEjecucion: ordenesResp.count ?? 0,
+        facturasPendientes: facturasResp.data?.length ?? 0,
+        carteraPorCobrar: cartera,
+        proyectosCriticos: criticos.length
+      };
 
-    agendaHoy = (agendaResp.data ?? []).map((row: any) => ({
-      id: row.id,
-      hora: row.franja_horaria ?? "-",
-      tipo: row.tipo_visita ?? "-",
-      estado: row.estado_agenda,
-      responsable: (row.profiles as { full_name?: string } | null)?.full_name ?? "-",
-      caso: (row.requerimientos as { codigo_requerimiento?: string } | null)?.codigo_requerimiento ?? "-"
-    }));
+      casosRecientes = (casosResp.data ?? []).map((row: any) => ({
+        id: row.id,
+        nombre:
+          (row.requerimientos as { codigo_requerimiento?: string } | null)?.codigo_requerimiento ??
+          (row.technical_projects as { name?: string } | null)?.name ??
+          row.id,
+        tipo: row.case_type,
+        estado: row.estado_financiero,
+        valor: Number(row.valor_aprobado ?? 0),
+        updated_at: row.updated_at
+      }));
 
-    proyectosRiesgo = criticos.slice(0, 8).map((project: any) => ({
-      id: project.id,
-      nombre: project.name,
-      cliente: (project.clients as { name?: string } | null)?.name ?? "-",
-      estado: project.status,
-      prioridad: project.priority,
-      fecha_fin: project.planned_end_date ?? "-",
-      tareas_vencidas: overdueByProject[project.id] ?? 0
-    }));
+      agendaHoy = (agendaResp.data ?? []).map((row: any) => ({
+        id: row.id,
+        hora: row.franja_horaria ?? "-",
+        tipo: row.tipo_visita ?? "-",
+        estado: row.estado_agenda,
+        responsable: (row.profiles as { full_name?: string } | null)?.full_name ?? "-",
+        caso: (row.requerimientos as { codigo_requerimiento?: string } | null)?.codigo_requerimiento ?? "-"
+      }));
+
+      proyectosRiesgo = criticos.slice(0, 8).map((project: any) => ({
+        id: project.id,
+        nombre: project.name,
+        cliente: (project.clients as { name?: string } | null)?.name ?? "-",
+        estado: project.status,
+        prioridad: project.priority,
+        fecha_fin: project.planned_end_date ?? "-",
+        tareas_vencidas: overdueByProject[project.id] ?? 0
+      }));
+    } catch (error) {
+      console.error("[dashboard] fatal KPI load error:", error);
+      dashboardDataError =
+        "No fue posible cargar indicadores del dashboard. Verifica configuración de Supabase (service role, tablas y permisos).";
+    }
   }
 
   return (
@@ -186,6 +223,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       <p>Visión ejecutiva de casos, operación, comercial, proyectos y finanzas.</p>
       {params.error ? <p className="feedback error">{params.error}</p> : null}
       {params.ok ? <p className="feedback success">{params.ok}</p> : null}
+      {dashboardDataError ? <p className="feedback error">{dashboardDataError}</p> : null}
 
       {!showExecutive ? (
         <p className="feedback">Tu perfil no tiene acceso al dashboard gerencial. Usa Mis tareas para operación diaria.</p>

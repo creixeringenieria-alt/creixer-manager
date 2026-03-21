@@ -1,3 +1,7 @@
+import { redirect } from "next/navigation";
+
+import { isValidRole } from "@/lib/auth/roles";
+import { createClient } from "@/lib/supabase/server";
 import { loginWithPasswordAction } from "./actions";
 
 interface LoginPageProps {
@@ -6,6 +10,19 @@ interface LoginPageProps {
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
+  const supabase = (await createClient()) as any;
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    const role = typeof profile?.role === "string" && isValidRole(profile.role) ? profile.role : null;
+    if (role) {
+      redirect("/dashboard");
+    }
+    redirect("/acceso-incompleto?error=Tu%20sesi%C3%B3n%20no%20tiene%20rol%20v%C3%A1lido.");
+  }
 
   return (
     <main className="login-main">

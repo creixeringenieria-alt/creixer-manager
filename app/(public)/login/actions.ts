@@ -34,6 +34,10 @@ export async function loginWithPasswordAction(formData: FormData) {
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).maybeSingle();
   const role = typeof profile?.role === "string" && isValidRole(profile.role) ? profile.role : null;
+  if (!role) {
+    console.warn("[auth][login] session created without valid profile role", { userId: data.user.id });
+    redirect("/acceso-incompleto?error=Tu%20usuario%20no%20tiene%20perfil%20completo.");
+  }
 
   redirect(getRoleHomePath(role));
 }

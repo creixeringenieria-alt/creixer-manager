@@ -82,6 +82,9 @@ export async function getCurrentUserRole(): Promise<{ userId: string | null; rol
       ? user.user_metadata.role
       : null);
   const role: AppRole | null = roleFromProfile ?? (metaRole as AppRole | null);
+  if (!role) {
+    console.warn("[auth][permissions] authenticated user without role", { userId: user.id });
+  }
 
   return { userId: user.id as string, role };
 }
@@ -95,12 +98,16 @@ async function getPermissionsFromDb(role: AppRole | null): Promise<AppPermission
     const supabase = createAdminClient();
     const { data, error } = await supabase.from("role_permissions").select("permission_key").eq("role", role);
     if (error || !data) {
+      if (error) {
+        console.error("[auth][permissions] role_permissions query error", { role, error: error.message });
+      }
       return null;
     }
     return data
       .map((row: { permission_key: string }) => row.permission_key)
       .filter((key): key is AppPermission => APP_PERMISSIONS.includes(key as AppPermission));
   } catch {
+    console.error("[auth][permissions] role_permissions lookup failed unexpectedly", { role });
     return null;
   }
 }
@@ -142,7 +149,12 @@ export async function requirePagePermission(
     redirect(`/login?error=${encodeURIComponent("Debes iniciar sesión.")}`);
   }
 
-  if (!ctx.role || !ctx.normalizedRole || !ctx.permissions.includes(permission)) {
+  if (!ctx.role || !ctx.normalizedRole) {
+    console.warn("[auth][permissions] missing role in requirePagePermission", { permission, userId: ctx.userId });
+    redirect(`/acceso-incompleto?error=${encodeURIComponent("Tu usuario no tiene rol configurado.")}`);
+  }
+
+  if (!ctx.permissions.includes(permission)) {
     redirect(`${deniedPath}?error=${encodeURIComponent(message)}`);
   }
 
@@ -160,7 +172,14 @@ export async function requireActionPermission(
   message: string
 ): Promise<{ userId: string; role: AppRole; normalizedRole: AppRole; permissions: AppPermission[] }> {
   const ctx = await getCurrentUserPermissions();
-  if (!ctx.userId || !ctx.role || !ctx.normalizedRole || !ctx.permissions.includes(permission)) {
+  if (!ctx.userId) {
+    redirect(`/login?error=${encodeURIComponent("Debes iniciar sesión.")}`);
+  }
+  if (!ctx.role || !ctx.normalizedRole) {
+    console.warn("[auth][permissions] missing role in requireActionPermission", { permission, userId: ctx.userId });
+    redirect(`/acceso-incompleto?error=${encodeURIComponent("Tu usuario no tiene rol configurado.")}`);
+  }
+  if (!ctx.permissions.includes(permission)) {
     redirect(`${deniedPath}?error=${encodeURIComponent(message)}`);
   }
   return {

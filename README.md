@@ -63,3 +63,7 @@ Revisar `.env.example`.
 Guía paso a paso para Vercel + Supabase Auth:
 
 - [docs/deploy-vercel.md](/Users/juliangamboa/Documents/Creixer Manager/docs/deploy-vercel.md)
+
+## Roles y permisos
+
+- [docs/roles-y-permisos.md](/Users/juliangamboa/Documents/Creixer Manager/docs/roles-y-permisos.md)

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { requireActionAccess } from "@/lib/auth/permissions";
+import { requireActionPermission } from "@/lib/auth/permissions";
 import { generarCodigoRequerimiento } from "@/lib/operaciones/constants";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -42,11 +42,7 @@ async function getCurrentUserId() {
 }
 
 export async function crearRequerimientoAction(formData: FormData) {
-  await requireActionAccess(
-    ["administrador", "asistente"],
-    "/dashboard",
-    "Acceso denegado: tu rol no puede crear requerimientos."
-  );
+  await requireActionPermission("crear_casos", "/dashboard", "Acceso denegado: tu rol no puede crear requerimientos.");
 
   const clienteId = getText(formData, "cliente_id");
   const inmuebleId = getText(formData, "inmueble_id");

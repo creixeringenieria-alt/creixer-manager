@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requirePageAccess } from "@/lib/auth/permissions";
+import { getCurrentUserPermissions, requirePagePermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 interface CasosPageProps {
@@ -8,11 +8,12 @@ interface CasosPageProps {
 }
 
 export default async function CasosPage({ searchParams }: CasosPageProps) {
-  await requirePageAccess(
-    ["administrador", "asistente", "contabilidad", "tecnico"],
-    "/dashboard",
-    "Acceso denegado: tu rol no puede ver la consolidación de casos."
-  );
+  const permissionContext = await getCurrentUserPermissions();
+  if (permissionContext.permissions.includes("ver_casos")) {
+    await requirePagePermission("ver_casos", "/dashboard", "Acceso denegado: tu rol no puede ver casos.");
+  } else {
+    await requirePagePermission("ver_casos_propios", "/dashboard", "Acceso denegado: solo puedes ver casos propios.");
+  }
 
   const params = await searchParams;
   const supabase = createAdminClient();
@@ -33,7 +34,24 @@ export default async function CasosPage({ searchParams }: CasosPageProps) {
   }
 
   const casesResp = await query;
-  const rows = casesResp.data ?? [];
+  let rows = casesResp.data ?? [];
+
+  if (!permissionContext.permissions.includes("ver_casos") && permissionContext.userId) {
+    const tecnicoId = permissionContext.userId;
+    const [agendasPropiasResp, tareasProyectoResp] = await Promise.all([
+      supabase.from("agenda_operativa").select("requerimiento_id").eq("tecnico_id", tecnicoId),
+      supabase.from("technical_project_tasks").select("project_id").eq("responsible_user_id", tecnicoId)
+    ]);
+
+    const requerimientoIds = new Set((agendasPropiasResp.data ?? []).map((row) => row.requerimiento_id));
+    const projectIds = new Set((tareasProyectoResp.data ?? []).map((row) => row.project_id));
+
+    rows = rows.filter(
+      (row) =>
+        (row.requerimiento_id && requerimientoIds.has(row.requerimiento_id)) ||
+        (row.technical_project_id && projectIds.has(row.technical_project_id))
+    );
+  }
 
   return (
     <main>

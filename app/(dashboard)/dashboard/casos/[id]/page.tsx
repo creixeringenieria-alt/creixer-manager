@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requirePageAccess } from "@/lib/auth/permissions";
+import { getCurrentUserPermissions, requirePagePermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 interface CasoDetallePageProps {
@@ -25,11 +25,12 @@ function dateTimeValue(value: string | null | undefined) {
 }
 
 export default async function CasoDetallePage({ params, searchParams }: CasoDetallePageProps) {
-  await requirePageAccess(
-    ["administrador", "asistente", "contabilidad", "tecnico"],
-    "/dashboard",
-    "Acceso denegado: tu rol no puede acceder a la vista consolidada del caso."
-  );
+  const permissionContext = await getCurrentUserPermissions();
+  if (permissionContext.permissions.includes("ver_casos")) {
+    await requirePagePermission("ver_casos", "/dashboard", "Acceso denegado para ver el expediente.");
+  } else {
+    await requirePagePermission("ver_casos_propios", "/dashboard", "Acceso denegado: solo puedes ver casos propios.");
+  }
 
   const { id } = await params;
   const query = await searchParams;
@@ -81,12 +82,46 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
   const projectType = projectResp.data?.type ?? null;
   const projectIsInterventoria = projectType === "interventoria" || projectType === "consultoria";
 
+  if (!permissionContext.permissions.includes("ver_casos") && permissionContext.userId) {
+    const tecnicoId = permissionContext.userId;
+    const [agendaPropiaResp, tareaPropiaResp] = await Promise.all([
+      requestId
+        ? supabase
+            .from("agenda_operativa")
+            .select("id")
+            .eq("requerimiento_id", requestId)
+            .eq("tecnico_id", tecnicoId)
+            .limit(1)
+        : Promise.resolve({ data: [] as Array<{ id: string }>, error: null }),
+      projectId
+        ? supabase
+            .from("technical_project_tasks")
+            .select("id")
+            .eq("project_id", projectId)
+            .eq("responsible_user_id", tecnicoId)
+            .limit(1)
+        : Promise.resolve({ data: [] as Array<{ id: string }>, error: null })
+    ]);
+
+    const isAssigned = (agendaPropiaResp.data?.length ?? 0) > 0 || (tareaPropiaResp.data?.length ?? 0) > 0;
+    if (!isAssigned) {
+      return (
+        <main>
+          <p className="feedback error">Acceso denegado: este caso no está asignado a tu usuario.</p>
+          <Link href="/dashboard/casos">Volver a casos</Link>
+        </main>
+      );
+    }
+  }
+
   const [
     agendasResp,
     projectTasksResp,
     reqDocsResp,
     projectDocsResp,
     quotesResp,
+    workOrdersResp,
+    satisfactionActsResp,
     invoicesResp,
     advancesResp,
     movementsResp,
@@ -101,7 +136,7 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
       ? supabase
           .from("agenda_operativa")
           .select(
-            "id, fecha_programada, franja_horaria, tipo_visita, estado_agenda, direccion, contacto, observaciones_logisticas, profiles(full_name), reportes_visita(id, resultado_visita, hora_llegada, hora_salida, observaciones)"
+            "id, fecha_programada, franja_horaria, tipo_visita, estado_agenda, direccion, contacto, observaciones_logisticas, profiles(full_name), reportes_visita(id, created_at, resultado_visita, hora_llegada, hora_salida, observaciones, diagnostico_tecnico, reporte_visita_fotos(id, storage_path, descripcion))"
           )
           .eq("requerimiento_id", requestId)
           .order("fecha_programada", { ascending: true })
@@ -135,6 +170,20 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
           .select("id, codigo_cotizacion, estado, fecha_cotizacion, total_final")
           .eq("requerimiento_id", requestId)
           .order("fecha_cotizacion", { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+    requestId
+      ? supabase
+          .from("work_orders")
+          .select("id, codigo_orden, status, fecha_documento, scheduled_start")
+          .eq("requerimiento_id", requestId)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+    requestId
+      ? supabase
+          .from("actas_satisfaccion")
+          .select("id, codigo_acta, fecha_acta, satisfaccion, created_at")
+          .eq("requerimiento_id", requestId)
+          .order("created_at", { ascending: false })
       : Promise.resolve({ data: [], error: null }),
     supabase
       .from("invoices")
@@ -187,10 +236,63 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
   const visitasRealizadas = agendas.filter((agenda) => agenda.estado_agenda === "cerrada");
   const tareasMostradas = projectTasks.length > 0 ? projectTasks : agendas;
   const cotizacionActual = (quotesResp.data ?? [])[0] as any | undefined;
+  const ordenActual = (workOrdersResp.data ?? [])[0] as any | undefined;
+  const actaActual = (satisfactionActsResp.data ?? [])[0] as any | undefined;
   const totalMateriales = (movementsResp.data ?? []).reduce((acc, row: any) => acc + Number(row.total_cost ?? 0), 0);
   const herramientasPendientes = (toolAssignmentsResp.data ?? []).filter((row: any) => !row.returned_at).length;
   const projectTaskProgress =
     projectTasks.length === 0 ? 0 : Math.round(projectTasks.reduce((acc, row) => acc + Number(row.progress_percent ?? 0), 0) / projectTasks.length);
+  const reportes = agendas.flatMap((agenda) => (agenda.reportes_visita as any[] | null) ?? []);
+  const diagnosticoBase =
+    reportes.find((reporte) => reporte.diagnostico_tecnico)?.diagnostico_tecnico ??
+    reportes.find((reporte) => reporte.observaciones)?.observaciones ??
+    (reqResp.data as any)?.descripcion ??
+    projectResp.data?.description ??
+    "Sin diagnóstico registrado.";
+  const fotosVisita = reportes
+    .flatMap((reporte) => (reporte.reporte_visita_fotos as any[] | null) ?? [])
+    .map((foto) => ({
+      ...foto,
+      url: foto.storage_path
+        ? supabase.storage.from("evidences").getPublicUrl(foto.storage_path).data.publicUrl
+        : null
+    }));
+
+  const historial = [
+    { fecha: financial.created_at, etiqueta: "Caso/proyecto creado", detalle: `Tipo ${financial.case_type}` },
+    ...agendas.map((agenda) => ({
+      fecha: agenda.fecha_programada,
+      etiqueta: "Visita programada",
+      detalle: `${agenda.tipo_visita} (${agenda.estado_agenda})`
+    })),
+    ...reportes.map((reporte) => ({
+      fecha: reporte.hora_llegada ?? reporte.created_at,
+      etiqueta: "Reporte de visita",
+      detalle: reporte.resultado_visita ?? "Reporte técnico"
+    })),
+    ...((quotesResp.data ?? []) as any[]).map((row) => ({
+      fecha: row.fecha_cotizacion,
+      etiqueta: "Cotización",
+      detalle: `${row.codigo_cotizacion} (${row.estado})`
+    })),
+    ...((workOrdersResp.data ?? []) as any[]).map((row) => ({
+      fecha: row.fecha_documento,
+      etiqueta: "Orden de trabajo",
+      detalle: `${row.codigo_orden ?? row.id} (${row.status})`
+    })),
+    ...((satisfactionActsResp.data ?? []) as any[]).map((row) => ({
+      fecha: row.fecha_acta ?? row.created_at,
+      etiqueta: "Acta de satisfacción",
+      detalle: `${row.codigo_acta ?? row.id} (${row.satisfaccion})`
+    })),
+    ...((invoicesResp.data ?? []) as any[]).map((row) => ({
+      fecha: row.issued_at,
+      etiqueta: "Factura",
+      detalle: `${row.invoice_number} (${row.status})`
+    }))
+  ]
+    .filter((item) => item.fecha)
+    .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
 
   const caseLabel =
     (reqResp.data as any)?.codigo_requerimiento ??
@@ -210,7 +312,7 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
     <main>
       <div className="page-header">
         <div>
-          <h1>Vista única del caso/proyecto</h1>
+          <h1>Expediente único de caso/proyecto</h1>
           <p>
             {caseLabel} | Estado financiero: <strong>{financial.estado_financiero}</strong>
           </p>
@@ -226,20 +328,43 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
       {query.ok ? <p className="feedback success">{query.ok}</p> : null}
 
       <section className="card">
+        <h2 style={{ marginTop: 0 }}>Encabezado</h2>
+        <p>
+          Cliente: <strong>{clientLabel}</strong> | Inmueble/ubicación: <strong>{inmuebleUbicacion}</strong>
+        </p>
+        <p>
+          Tipo: <strong>{financial.case_type}</strong> | Estado: <strong>{(reqResp.data as any)?.estado ?? projectResp.data?.status ?? "-"}</strong> |
+          Responsable:{" "}
+          <strong>
+            {(projectTasks.find((task) => task.priority === "alta")?.profiles as { full_name?: string } | null)?.full_name ??
+              (projectTasks.find((task) => task.profiles)?.profiles as { full_name?: string } | null)?.full_name ??
+              (agendas.find((agenda) => agenda.profiles)?.profiles as { full_name?: string } | null)?.full_name ??
+              "-"}
+          </strong>{" "}
+          | Prioridad: <strong>{(reqResp.data as any)?.prioridad ?? projectResp.data?.priority ?? "-"}</strong>
+        </p>
+        <p>
+          Fechas: inicio/reporte {dateValue((reqResp.data as any)?.fecha_reporte ?? projectResp.data?.start_date)} | fin planeado{" "}
+          {dateValue(projectResp.data?.planned_end_date)} | fin real {dateValue(projectResp.data?.actual_end_date)}
+        </p>
+      </section>
+
+      <section className="card">
         <div className="inline-form">
           <a href="#resumen">Resumen</a>
-          <a href="#documentos">Documentos</a>
+          <a href="#diagnostico">Diagnóstico</a>
           <a href="#agenda">Agenda/visitas</a>
-          <a href="#tareas">Tareas</a>
-          <a href="#comercial">Cotización/comercial</a>
+          <a href="#fotos-documentos">Fotos/documentos</a>
+          <a href="#cotizacion">Cotización</a>
+          <a href="#orden">Orden de trabajo</a>
+          <a href="#acta">Acta</a>
           <a href="#financiero">Financiero</a>
-          <a href="#recursos">Recursos</a>
-          {projectIsInterventoria ? <a href="#interventoria">Interventoría/consultoría</a> : null}
+          <a href="#historial">Historial</a>
         </div>
       </section>
 
       <section className="card" id="resumen">
-        <h2>A. Resumen</h2>
+        <h2>Resumen</h2>
         <p>Tipo de caso/proyecto: {financial.case_type}</p>
         <p>Cliente: {clientLabel}</p>
         <p>Inmueble/ubicación: {inmuebleUbicacion}</p>
@@ -255,42 +380,17 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
             "-"}
         </p>
         <p>
-          Fechas clave: reporte/inicio {dateValue((reqResp.data as any)?.fecha_reporte ?? projectResp.data?.start_date)} | fin planeado{" "}
-          {dateValue(projectResp.data?.planned_end_date)} | fin real {dateValue(projectResp.data?.actual_end_date)}
+          Documentos asociados: {allDocs.length} | Visitas: {agendas.length} | Tareas: {tareasMostradas.length}
         </p>
       </section>
 
-      <section className="card" id="documentos">
-        <h2>B. Documentos</h2>
-        {allDocs.length === 0 ? <p>No hay documentos adjuntos en el caso/proyecto.</p> : null}
-        {allDocs.length > 0 ? (
-          <div className="table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Tipo</th>
-                  <th>Nombre</th>
-                  <th>Archivo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allDocs.map((doc: any) => (
-                  <tr key={doc.id}>
-                    <td>{dateTimeValue(doc.created_at)}</td>
-                    <td>{doc.document_type}</td>
-                    <td>{doc.name}</td>
-                    <td>{doc.file_url ? <a href={doc.file_url}>{doc.original_filename}</a> : doc.original_filename}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
+      <section className="card" id="diagnostico">
+        <h2>Diagnóstico</h2>
+        <p>{diagnosticoBase}</p>
       </section>
 
       <section className="card" id="agenda">
-        <h2>C. Agenda / visitas</h2>
+        <h2>Agenda / visitas</h2>
         <p>
           Programadas: {visitasProgramadas.length} | Realizadas: {visitasRealizadas.length}
         </p>
@@ -322,53 +422,51 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
         </div>
       </section>
 
-      <section className="card" id="tareas">
-        <h2>D. Tareas</h2>
+      <section className="card" id="fotos-documentos">
+        <h2>Fotos / documentos</h2>
         <p>
-          Total: {tareasMostradas.length} | Avance promedio: {projectTaskProgress}%
+          Fotos de visita: {fotosVisita.length} | Documentos adjuntos: {allDocs.length}
         </p>
-        <div className="table-wrapper">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Tarea</th>
-                <th>Responsable</th>
-                <th>Fecha límite</th>
-                <th>Estado</th>
-                <th>Prioridad</th>
-                <th>% avance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projectTasks.map((task) => (
-                <tr key={task.id}>
-                  <td>{task.name}</td>
-                  <td>{(task.profiles as { full_name?: string } | null)?.full_name ?? "-"}</td>
-                  <td>{task.planned_end_date ?? "-"}</td>
-                  <td>{task.status}</td>
-                  <td>{task.priority}</td>
-                  <td>{Number(task.progress_percent ?? 0)}%</td>
+        {fotosVisita.length > 0 ? (
+          <div className="photo-grid">
+            {fotosVisita.slice(0, 8).map((foto: any) => (
+              <article key={foto.id} className="photo-card">
+                <img src={foto.url ?? ""} alt="Foto visita" />
+                <small>{foto.descripcion ?? "Evidencia de visita"}</small>
+              </article>
+            ))}
+          </div>
+        ) : null}
+
+        {allDocs.length === 0 ? <p>No hay documentos adjuntos en el caso/proyecto.</p> : null}
+        {allDocs.length > 0 ? (
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Tipo</th>
+                  <th>Nombre</th>
+                  <th>Archivo</th>
                 </tr>
-              ))}
-              {projectTasks.length === 0
-                ? agendas.map((agenda) => (
-                    <tr key={agenda.id}>
-                      <td>{agenda.tipo_visita}</td>
-                      <td>{(agenda.profiles as { full_name?: string } | null)?.full_name ?? "-"}</td>
-                      <td>{agenda.fecha_programada}</td>
-                      <td>{agenda.estado_agenda}</td>
-                      <td>-</td>
-                      <td>{agenda.estado_agenda === "cerrada" ? "100" : "0"}%</td>
-                    </tr>
-                  ))
-                : null}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {allDocs.map((doc: any) => (
+                  <tr key={doc.id}>
+                    <td>{dateTimeValue(doc.created_at)}</td>
+                    <td>{doc.document_type}</td>
+                    <td>{doc.name}</td>
+                    <td>{doc.file_url ? <a href={doc.file_url}>{doc.original_filename}</a> : doc.original_filename}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </section>
 
-      <section className="card" id="comercial">
-        <h2>E. Cotización / comercial</h2>
+      <section className="card" id="cotizacion">
+        <h2>Cotización</h2>
         {cotizacionActual ? (
           <p>
             Cotización: <strong>{cotizacionActual.codigo_cotizacion}</strong> | Estado: {cotizacionActual.estado} | Valor:{" "}
@@ -380,8 +478,32 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
         )}
       </section>
 
+      <section className="card" id="orden">
+        <h2>Orden de trabajo</h2>
+        {ordenActual ? (
+          <p>
+            Orden: <strong>{ordenActual.codigo_orden ?? ordenActual.id}</strong> | Estado: {ordenActual.status} | Fecha:{" "}
+            {dateValue(ordenActual.fecha_documento)} | <Link href={`/dashboard/ordenes-trabajo/${ordenActual.id}`}>Abrir orden</Link>
+          </p>
+        ) : (
+          <p>No hay orden de trabajo asociada al caso.</p>
+        )}
+      </section>
+
+      <section className="card" id="acta">
+        <h2>Acta</h2>
+        {actaActual ? (
+          <p>
+            Acta: <strong>{actaActual.codigo_acta ?? actaActual.id}</strong> | Satisfacción: {actaActual.satisfaccion} | Fecha:{" "}
+            {dateValue(actaActual.fecha_acta)} | <Link href={`/dashboard/actas-satisfaccion/${actaActual.id}`}>Abrir acta</Link>
+          </p>
+        ) : (
+          <p>No hay acta de satisfacción asociada al caso.</p>
+        )}
+      </section>
+
       <section className="card" id="financiero">
-        <h2>F. Financiero</h2>
+        <h2>Finanzas</h2>
         <div className="metrics-grid">
           <article className="card metric-card">
             <p className="metric-label">Cotizado</p>
@@ -422,85 +544,47 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
         </p>
       </section>
 
-      <section className="card" id="recursos">
-        <h2>G. Recursos</h2>
+      <section className="card" id="historial">
+        <h2>Historial</h2>
         <p>
-          Materiales usados: {(movementsResp.data ?? []).length} movimientos ({money(totalMateriales)}) | Herramientas asignadas:{" "}
-          {(toolAssignmentsResp.data ?? []).length} | Pendientes de devolución: {herramientasPendientes}
+          Tareas: {tareasMostradas.length} | Avance promedio: {projectTaskProgress}% | Materiales:{" "}
+          {(movementsResp.data ?? []).length} ({money(totalMateriales)}) | Herramientas pendientes: {herramientasPendientes}
         </p>
-        <div className="split-grid">
-          <div>
-            <h3>Materiales</h3>
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Tipo</th>
-                    <th>Material</th>
-                    <th>Cantidad</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(movementsResp.data ?? []).slice(0, 10).map((row: any) => (
-                    <tr key={row.id}>
-                      <td>{dateTimeValue(row.created_at)}</td>
-                      <td>{row.movement_type}</td>
-                      <td>{(row.inventory_items as { name?: string } | null)?.name ?? "-"}</td>
-                      <td>{Number(row.quantity)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div>
-            <h3>Herramientas</h3>
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Herramienta</th>
-                    <th>Responsable</th>
-                    <th>Estado</th>
-                    <th>Asignada</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(toolAssignmentsResp.data ?? []).slice(0, 10).map((row: any) => (
-                    <tr key={row.id}>
-                      <td>
-                        {(row.tools as { code?: string; name?: string } | null)?.code} -{" "}
-                        {(row.tools as { code?: string; name?: string } | null)?.name}
-                      </td>
-                      <td>{(row.profiles as { full_name?: string } | null)?.full_name ?? "-"}</td>
-                      <td>{row.status}</td>
-                      <td>{dateTimeValue(row.assigned_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Evento</th>
+                <th>Detalle</th>
+              </tr>
+            </thead>
+            <tbody>
+              {historial.map((item, index) => (
+                <tr key={`hist-${index}`}>
+                  <td>{dateValue(item.fecha)}</td>
+                  <td>{item.etiqueta}</td>
+                  <td>{item.detalle}</td>
+                </tr>
+              ))}
+              {historial.length === 0 ? (
+                <tr>
+                  <td colSpan={3}>Sin historial registrado.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </div>
-      </section>
 
-      {projectIsInterventoria && projectId ? (
-        <section className="card" id="interventoria">
-          <h2>H. Interventoría / consultoría</h2>
-          <p>
-            Visitas: {(interventoriaVisitsResp.data ?? []).length} | Calidad: {(interventoriaQualityResp.data ?? []).length} | SST:{" "}
-            {(interventoriaSstResp.data ?? []).length} | Actas: {(interventoriaActasResp.data ?? []).length} | Requerimientos a contratista:{" "}
-            {(interventoriaReqResp.data ?? []).length}
-          </p>
-          <div className="inline-form">
-            <Link href={`/dashboard/proyectos-tecnicos/${projectId}/interventoria`}>Abrir interventoría</Link>
-            <Link href={`/dashboard/proyectos-tecnicos/${projectId}/gantt`}>Ver Gantt</Link>
+        {projectIsInterventoria && projectId ? (
+          <div className="inline-form" style={{ marginTop: "0.75rem" }}>
+            <Link href={`/dashboard/proyectos-tecnicos/${projectId}/interventoria`}>Interventoría</Link>
+            <Link href={`/dashboard/proyectos-tecnicos/${projectId}/gantt`}>Gantt</Link>
             <Link href={`/dashboard/proyectos-tecnicos/${projectId}/seguimientos`}>Seguimientos</Link>
             <Link href={`/dashboard/proyectos-tecnicos/${projectId}/entregables`}>Entregables</Link>
           </div>
-        </section>
-      ) : null}
+        ) : null}
+      </section>
     </main>
   );
 }

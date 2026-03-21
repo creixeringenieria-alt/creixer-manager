@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requirePageAccess } from "@/lib/auth/permissions";
+import { hasPermission, requirePagePermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import {
@@ -8,6 +8,7 @@ import {
   crearAnticipoAction,
   crearFacturaAction,
   crearNotaCreditoAction,
+  registrarGastoCajaMenorAction,
   registrarPagoFacturaAction
 } from "./actions";
 
@@ -20,16 +21,13 @@ function money(value: number) {
 }
 
 export default async function FinanzasPage({ searchParams }: FinanzasPageProps) {
-  await requirePageAccess(
-    ["administrador", "contabilidad", "asistente"],
-    "/dashboard",
-    "Acceso denegado: tu rol no puede acceder a finanzas."
-  );
+  await requirePagePermission("ver_finanzas", "/dashboard", "Acceso denegado: tu rol no puede acceder a finanzas.");
+  const canRegisterExpenses = await hasPermission("registrar_gastos");
 
   const params = await searchParams;
   const supabase = createAdminClient();
 
-  const [financialResp, invoicesResp, advancesResp] = await Promise.all([
+  const [financialResp, invoicesResp, advancesResp, pettyCashResp] = await Promise.all([
     supabase
       .from("financial_records")
       .select(
@@ -46,13 +44,19 @@ export default async function FinanzasPage({ searchParams }: FinanzasPageProps) 
       .from("advance_requests")
       .select("id, financial_record_id, status, amount_requested, amount_received")
       .order("created_at", { ascending: false })
-      .limit(200)
+      .limit(200),
+    supabase
+      .from("petty_cash_expenses")
+      .select("id, amount, expense_date, description, support_url, financial_record_id")
+      .order("created_at", { ascending: false })
+      .limit(100)
   ]);
 
   const today = new Date().toISOString().slice(0, 10);
   const financialRows = financialResp.data ?? [];
   const invoices = invoicesResp.data ?? [];
   const advances = advancesResp.data ?? [];
+  const pettyCash = pettyCashResp.data ?? [];
 
   const executedWithoutInvoice = financialRows.filter(
     (row) => row.estado_financiero === "en_ejecucion" && Number(row.valor_facturado) === 0
@@ -252,6 +256,67 @@ export default async function FinanzasPage({ searchParams }: FinanzasPageProps) 
           <button type="submit">Registrar anticipo</button>
         </form>
       </section>
+
+      {canRegisterExpenses ? (
+        <section className="card">
+          <h2>Caja menor (soporte obligatorio)</h2>
+          <form action={registrarGastoCajaMenorAction} className="form-grid">
+            <input type="hidden" name="return_path" value="/dashboard/finanzas" />
+            <select name="financial_record_id">
+              <option value="">Caso financiero (opcional)</option>
+              {financialRows.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {row.case_type} -{" "}
+                  {(row.requerimientos as { codigo_requerimiento?: string } | null)?.codigo_requerimiento ??
+                    (row.technical_projects as { name?: string } | null)?.name}
+                </option>
+              ))}
+            </select>
+            <input name="case_type" placeholder="Tipo (mantenimiento, consultoria, etc.)" />
+            <input type="number" step="0.01" name="amount" placeholder="Valor gasto" required />
+            <input type="date" name="expense_date" />
+            <input className="span-2" name="description" placeholder="Descripción del gasto" required />
+            <input
+              className="span-2"
+              name="support_url"
+              placeholder="URL soporte (obligatorio)"
+              required
+            />
+            <input className="span-2" name="support_storage_path" placeholder="Ruta storage (opcional)" />
+            <button type="submit">Registrar gasto</button>
+          </form>
+
+          <div className="table-wrapper" style={{ marginTop: "0.8rem" }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Descripción</th>
+                  <th>Valor</th>
+                  <th>Soporte</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pettyCash.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.expense_date}</td>
+                    <td>{row.description}</td>
+                    <td>{money(Number(row.amount))}</td>
+                    <td>
+                      <a href={row.support_url}>Ver soporte</a>
+                    </td>
+                  </tr>
+                ))}
+                {pettyCash.length === 0 ? (
+                  <tr>
+                    <td colSpan={4}>Sin gastos de caja menor registrados.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       <section className="card">
         <h2>Crear factura</h2>

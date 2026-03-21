@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { requireActionAccess } from "@/lib/auth/permissions";
+import { requireActionPermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function toText(formData: FormData, key: string) {
@@ -33,7 +33,7 @@ function ok(path: string, message: string): never {
 }
 
 export async function actualizarFichaFinancieraAction(formData: FormData) {
-  await requireActionAccess(["administrador", "contabilidad", "asistente"], "/dashboard", "Acceso denegado a ficha financiera.");
+  await requireActionPermission("ver_finanzas", "/dashboard", "Acceso denegado a ficha financiera.");
 
   const path = backTo(formData, "/dashboard/finanzas");
   const id = toText(formData, "id");
@@ -65,7 +65,7 @@ export async function actualizarFichaFinancieraAction(formData: FormData) {
 }
 
 export async function crearAnticipoAction(formData: FormData) {
-  await requireActionAccess(["administrador", "contabilidad", "asistente"], "/dashboard", "Acceso denegado a anticipos.");
+  await requireActionPermission("ver_finanzas", "/dashboard", "Acceso denegado a anticipos.");
 
   const path = backTo(formData, "/dashboard/finanzas");
   const financialRecordId = toText(formData, "financial_record_id");
@@ -94,7 +94,7 @@ export async function crearAnticipoAction(formData: FormData) {
 }
 
 export async function crearFacturaAction(formData: FormData) {
-  await requireActionAccess(["administrador", "contabilidad"], "/dashboard", "Acceso denegado a facturación.");
+  await requireActionPermission("ver_finanzas", "/dashboard", "Acceso denegado a facturación.");
 
   const path = backTo(formData, "/dashboard/finanzas");
   const financialRecordId = toText(formData, "financial_record_id");
@@ -133,7 +133,7 @@ export async function crearFacturaAction(formData: FormData) {
 }
 
 export async function registrarPagoFacturaAction(formData: FormData) {
-  await requireActionAccess(["administrador", "contabilidad"], "/dashboard", "Acceso denegado a recaudos.");
+  await requireActionPermission("ver_finanzas", "/dashboard", "Acceso denegado a recaudos.");
 
   const path = backTo(formData, "/dashboard/finanzas");
   const invoiceId = toText(formData, "invoice_id");
@@ -161,7 +161,7 @@ export async function registrarPagoFacturaAction(formData: FormData) {
 }
 
 export async function crearNotaCreditoAction(formData: FormData) {
-  await requireActionAccess(["administrador", "contabilidad"], "/dashboard", "Acceso denegado a notas crédito.");
+  await requireActionPermission("ver_finanzas", "/dashboard", "Acceso denegado a notas crédito.");
 
   const path = backTo(formData, "/dashboard/finanzas");
   const invoiceId = toText(formData, "invoice_id");
@@ -185,4 +185,38 @@ export async function crearNotaCreditoAction(formData: FormData) {
 
   revalidatePath("/dashboard/finanzas");
   return ok(path, "Nota crédito registrada.");
+}
+
+export async function registrarGastoCajaMenorAction(formData: FormData) {
+  await requireActionPermission("registrar_gastos", "/dashboard", "Acceso denegado para registrar gastos.");
+  await requireActionPermission("adjuntar_soportes", "/dashboard", "Acceso denegado para adjuntar soportes.");
+
+  const path = backTo(formData, "/dashboard/finanzas");
+  const supportUrl = toText(formData, "support_url");
+  if (!supportUrl) {
+    return fail(path, "Caja menor requiere soporte obligatorio (URL soporte).");
+  }
+
+  const amount = toNumber(toText(formData, "amount"), 0);
+  if (amount <= 0) {
+    return fail(path, "El valor del gasto debe ser mayor a cero.");
+  }
+
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("petty_cash_expenses").insert({
+    financial_record_id: toText(formData, "financial_record_id"),
+    case_type: toText(formData, "case_type"),
+    amount,
+    expense_date: toText(formData, "expense_date"),
+    description: toText(formData, "description") ?? "Gasto operativo",
+    support_url: supportUrl,
+    support_storage_path: toText(formData, "support_storage_path")
+  });
+
+  if (error) {
+    return fail(path, error.message);
+  }
+
+  revalidatePath("/dashboard/finanzas");
+  return ok(path, "Gasto de caja menor registrado.");
 }

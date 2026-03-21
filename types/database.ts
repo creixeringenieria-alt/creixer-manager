@@ -42,7 +42,18 @@ export interface Database {
       profiles: {
         Row: {
           id: string;
-          role: "administrador" | "asistente" | "tecnico" | "contabilidad" | "cliente";
+          role:
+            | "super_admin"
+            | "gerente_operativo"
+            | "administrativo"
+            | "contable"
+            | "almacen"
+            | "lider_operativo"
+            | "tecnico"
+            | "administrador"
+            | "asistente"
+            | "contabilidad"
+            | "cliente";
           full_name: string | null;
           client_id: string | null;
           created_at: string;
@@ -50,14 +61,36 @@ export interface Database {
         };
         Insert: {
           id: string;
-          role?: "administrador" | "asistente" | "tecnico" | "contabilidad" | "cliente";
+          role?:
+            | "super_admin"
+            | "gerente_operativo"
+            | "administrativo"
+            | "contable"
+            | "almacen"
+            | "lider_operativo"
+            | "tecnico"
+            | "administrador"
+            | "asistente"
+            | "contabilidad"
+            | "cliente";
           full_name?: string | null;
           client_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
-          role?: "administrador" | "asistente" | "tecnico" | "contabilidad" | "cliente";
+          role?:
+            | "super_admin"
+            | "gerente_operativo"
+            | "administrativo"
+            | "contable"
+            | "almacen"
+            | "lider_operativo"
+            | "tecnico"
+            | "administrador"
+            | "asistente"
+            | "contabilidad"
+            | "cliente";
           full_name?: string | null;
           client_id?: string | null;
           updated_at?: string;

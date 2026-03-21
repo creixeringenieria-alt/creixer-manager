@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { requireActionAccess } from "@/lib/auth/permissions";
+import { requireActionPermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function getText(formData: FormData, key: string) {
@@ -24,11 +24,7 @@ function ok(message: string) {
 }
 
 export async function crearAgendaOperativaAction(formData: FormData) {
-  await requireActionAccess(
-    ["administrador", "asistente"],
-    "/dashboard",
-    "Acceso denegado: tu rol no puede agendar visitas."
-  );
+  await requireActionPermission("asignar_tecnicos", "/dashboard", "Acceso denegado: tu rol no puede agendar visitas.");
 
   const requerimientoId = getText(formData, "requerimiento_id");
   const tecnicoId = getText(formData, "tecnico_id");
@@ -66,11 +62,7 @@ export async function crearAgendaOperativaAction(formData: FormData) {
 }
 
 export async function actualizarEstadoAgendaAction(formData: FormData) {
-  await requireActionAccess(
-    ["administrador", "asistente"],
-    "/dashboard",
-    "Acceso denegado: tu rol no puede cambiar el estado de agenda."
-  );
+  await requireActionPermission("editar_casos", "/dashboard", "Acceso denegado: tu rol no puede cambiar estado de agenda.");
 
   const agendaId = getText(formData, "agenda_id");
   const estadoAgenda = getText(formData, "estado_agenda");

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requirePageAccess } from "@/lib/auth/permissions";
+import { requirePagePermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 interface AlmacenDashboardPageProps {
@@ -22,11 +22,7 @@ function money(value: number) {
 }
 
 export default async function AlmacenDashboardPage({ searchParams }: AlmacenDashboardPageProps) {
-  await requirePageAccess(
-    ["administrador", "asistente"],
-    "/dashboard",
-    "Acceso denegado: tu rol no puede acceder al módulo de almacén."
-  );
+  await requirePagePermission("ver_inventario", "/dashboard", "Acceso denegado: tu rol no puede ver inventario.");
 
   const params = await searchParams;
   const supabase = createAdminClient();

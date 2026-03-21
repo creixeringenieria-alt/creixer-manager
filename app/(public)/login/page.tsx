@@ -8,11 +8,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
 
   return (
-    <main>
-      <div className="card">
-        <img src="/logo-creixer.png" alt="Creixer" className="login-logo" />
-        <h1>Ingreso</h1>
-        <p>Inicia sesión con tu cuenta de Creixer Manager.</p>
+    <main className="login-main">
+      <div className="card login-card">
+        <img src="/logo-creixer.png" alt="Creixer Ingeniería" className="login-logo" />
+        <h1>Creixer Manager</h1>
+        <p className="login-subtitle">Plataforma operativa y gerencial de Creixer Ingeniería</p>
 
         {params.error ? <p className="feedback error">{params.error}</p> : null}
 

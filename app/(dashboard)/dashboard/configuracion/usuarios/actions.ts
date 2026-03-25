@@ -15,6 +15,20 @@ function textValue(formData: FormData, key: string, required = false) {
   return normalized || null;
 }
 
+async function getProfilesAvailableColumns(admin: any): Promise<Set<string>> {
+  const { data, error } = await admin
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", "profiles");
+
+  if (error || !data) {
+    return new Set();
+  }
+
+  return new Set((data as Array<{ column_name: string }>).map((row) => row.column_name));
+}
+
 export async function adminUpdateUserBasicDataAction(formData: FormData) {
   const { userId, normalizedRole } = await getCurrentUserPermissions();
   if (!userId) {
@@ -29,7 +43,7 @@ export async function adminUpdateUserBasicDataAction(formData: FormData) {
     redirect("/dashboard/configuracion/usuarios?error=Usuario%20inv%C3%A1lido.");
   }
 
-  const updates: Record<string, unknown> = {
+  const rawUpdates: Record<string, unknown> = {
     full_name: textValue(formData, "full_name"),
     phone: textValue(formData, "phone"),
     document_type: textValue(formData, "document_type"),
@@ -50,9 +64,9 @@ export async function adminUpdateUserBasicDataAction(formData: FormData) {
     if (!role || !internalRoles.includes(role)) {
       redirect("/dashboard/configuracion/usuarios?error=Rol%20interno%20inv%C3%A1lido%20para%20colaborador%20Creixer.");
     }
-    updates.user_type = "colaborador_creixer";
-    updates.organization_name = organizationName || "Creixer Ingeniería S.A.S.";
-    updates.client_id = null;
+    rawUpdates.user_type = "colaborador_creixer";
+    rawUpdates.organization_name = organizationName || "Creixer Ingeniería S.A.S.";
+    rawUpdates.client_id = null;
   } else {
     if (!role || !externalRoles.includes(role)) {
       redirect("/dashboard/configuracion/usuarios?error=Rol%20externo%20inv%C3%A1lido%20para%20usuario%20inmobiliaria.");
@@ -60,14 +74,16 @@ export async function adminUpdateUserBasicDataAction(formData: FormData) {
     if (!clientId) {
       redirect("/dashboard/configuracion/usuarios?error=Debes%20asociar%20una%20inmobiliaria%20para%20usuario%20externo.");
     }
-    updates.user_type = "usuario_inmobiliaria";
-    updates.organization_name = null;
-    updates.client_id = clientId;
+    rawUpdates.user_type = "usuario_inmobiliaria";
+    rawUpdates.organization_name = null;
+    rawUpdates.client_id = clientId;
   }
 
-  updates.role = role;
+  rawUpdates.role = role;
 
   const supabase = createAdminClient() as any;
+  const availableColumns = await getProfilesAvailableColumns(supabase);
+  const updates = Object.fromEntries(Object.entries(rawUpdates).filter(([key]) => availableColumns.has(key)));
   const { error } = await supabase.from("profiles").update(updates).eq("id", profileId);
   if (error) {
     redirect(`/dashboard/configuracion/usuarios?error=${encodeURIComponent(`No se pudo actualizar usuario: ${error.message}`)}`);

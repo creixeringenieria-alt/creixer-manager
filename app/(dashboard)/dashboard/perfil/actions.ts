@@ -22,6 +22,20 @@ function sanitizeRedirect(path: FormDataEntryValue | null) {
   return path;
 }
 
+async function getProfilesAvailableColumns(admin: any): Promise<Set<string>> {
+  const { data, error } = await admin
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", "profiles");
+
+  if (error || !data) {
+    return new Set();
+  }
+
+  return new Set((data as Array<{ column_name: string }>).map((row) => row.column_name));
+}
+
 export async function updateOwnBasicProfileAction(formData: FormData) {
   const redirectTo = sanitizeRedirect(formData.get("redirect_to"));
   const supabase = (await createClient()) as any;
@@ -33,16 +47,26 @@ export async function updateOwnBasicProfileAction(formData: FormData) {
     redirect("/login?error=Debes%20iniciar%20sesi%C3%B3n.");
   }
 
-  const updates = {
+  const admin = createAdminClient() as any;
+  const availableColumns = await getProfilesAvailableColumns(admin);
+
+  const rawUpdates = {
     full_name: textValue(formData, "full_name"),
     phone: textValue(formData, "phone"),
     document_type: textValue(formData, "document_type"),
     document_number: textValue(formData, "document_number")
   };
+  const updates = Object.fromEntries(Object.entries(rawUpdates).filter(([key]) => availableColumns.has(key)));
 
-  const admin = createAdminClient() as any;
   const { error } = await admin.from("profiles").update(updates).eq("id", user.id);
   if (error) {
+    if (String(error.message ?? "").includes("document_number")) {
+      redirect(
+        `${redirectTo}?error=${encodeURIComponent(
+          "No se pudo guardar número de documento porque falta la migración en Supabase. Ejecuta supabase db push."
+        )}`
+      );
+    }
     redirect(`${redirectTo}?error=${encodeURIComponent(`No se pudo guardar datos básicos: ${error.message}`)}`);
   }
 

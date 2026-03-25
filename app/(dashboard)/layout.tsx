@@ -40,7 +40,7 @@ export default async function DashboardLayout({
               <span className="user-company">{empresa ?? "Sin inmobiliaria asociada"}</span>
             </summary>
             <div className="user-menu-dropdown">
-              <Link href="/perfil">Mi perfil</Link>
+              <Link href="/dashboard/perfil">Mi perfil</Link>
               <Link href="/dashboard/configuracion">Configuración</Link>
               <Link href="/dashboard/configuracion/roles-accesos">Roles y accesos</Link>
               <form action={logoutAction}>

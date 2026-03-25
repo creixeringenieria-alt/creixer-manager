@@ -16,6 +16,8 @@ interface SupabaseQueryResult<T = any> {
   count?: number | null;
 }
 
+const CLOSED_TASK_STATUSES = new Set(["completada", "finalizada", "cerrada", "cancelada"]);
+
 function currency(value: number) {
   return value.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 }
@@ -81,7 +83,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     try {
       const supabase = createAdminClient();
       console.info("[dashboard] loading executive kpis");
-      const [financialResp, overdueAgendaResp, visitasHoyResp, cotizacionesPendResp, ordenesResp, facturasResp, casosResp, agendaResp, projectsResp, overdueTasksResp] =
+      const [financialResp, overdueAgendaResp, visitasHoyResp, cotizacionesResp, ordenesResp, facturasResp, casosResp, agendaResp, projectsResp, overdueTasksResp] =
         await Promise.all([
           supabase
             .from("financial_records")
@@ -101,8 +103,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             .eq("fecha_programada", todayDate),
           supabase
             .from("cotizaciones")
-            .select("id", { count: "exact", head: true })
-            .in("estado", ["borrador", "en_revision_interna", "aprobada_internamente", "ajustes_solicitados", "pendiente_aprobacion"]),
+            // Evita dependencia de enums exactos entre ambientes.
+            .select("id, estado")
+            .order("created_at", { ascending: false })
+            .limit(500),
           supabase
             .from("work_orders")
             .select("id", { count: "exact", head: true })
@@ -118,7 +122,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           supabase
             .from("agenda_operativa")
             .select(
-              "id, fecha_programada, franja_horaria, tipo_visita, estado_agenda, requerimientos(codigo_requerimiento), profiles(full_name)"
+              // Evita joins de FK ambiguos; el nombre se resuelve luego con consulta separada.
+              "id, fecha_programada, franja_horaria, tipo_visita, estado_agenda, tecnico_id, requerimiento_id"
             )
             .eq("fecha_programada", todayDate)
             .order("franja_horaria", { ascending: true })
@@ -132,17 +137,41 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             .from("technical_project_tasks")
             .select("id, project_id, planned_end_date, status")
             .lt("planned_end_date", todayDate)
-            .not("status", "in", "(completada,finalizada,cerrada)")
         ]);
+
+      const agendaRows = (agendaResp.data ?? []) as Array<{
+        id: string;
+        fecha_programada: string;
+        franja_horaria: string | null;
+        tipo_visita: string | null;
+        estado_agenda: string;
+        tecnico_id: string | null;
+        requerimiento_id: string | null;
+      }>;
+      const tecnicoIds = Array.from(new Set(agendaRows.map((row) => row.tecnico_id).filter(Boolean))) as string[];
+      const requerimientoIds = Array.from(new Set(agendaRows.map((row) => row.requerimiento_id).filter(Boolean))) as string[];
+      const [tecnicosResp, requerimientosResp] = await Promise.all([
+        tecnicoIds.length > 0
+          ? supabase.from("profiles").select("id, full_name").in("id", tecnicoIds)
+          : Promise.resolve({ data: [], error: null }),
+        requerimientoIds.length > 0
+          ? supabase.from("requerimientos").select("id, codigo_requerimiento").in("id", requerimientoIds)
+          : Promise.resolve({ data: [], error: null })
+      ]);
+
+      const tecnicoMap = new Map((tecnicosResp.data ?? []).map((row: any) => [row.id, row.full_name ?? "-"]));
+      const requerimientoMap = new Map((requerimientosResp.data ?? []).map((row: any) => [row.id, row.codigo_requerimiento ?? "-"]));
       const queryMap: Array<{ name: string; result: SupabaseQueryResult }> = [
         { name: "financial_kpi_base", result: financialResp as SupabaseQueryResult },
         { name: "agenda_vencida_count", result: overdueAgendaResp as SupabaseQueryResult },
         { name: "agenda_hoy_count", result: visitasHoyResp as SupabaseQueryResult },
-        { name: "cotizaciones_pendientes_count", result: cotizacionesPendResp as SupabaseQueryResult },
+        { name: "cotizaciones_rows", result: cotizacionesResp as SupabaseQueryResult },
         { name: "ordenes_en_ejecucion_count", result: ordenesResp as SupabaseQueryResult },
         { name: "facturas_pendientes_rows", result: facturasResp as SupabaseQueryResult },
         { name: "casos_recientes_rows", result: casosResp as SupabaseQueryResult },
         { name: "agenda_hoy_rows", result: agendaResp as SupabaseQueryResult },
+        { name: "agenda_tecnicos_rows", result: tecnicosResp as SupabaseQueryResult },
+        { name: "agenda_requerimientos_rows", result: requerimientosResp as SupabaseQueryResult },
         { name: "proyectos_rows", result: projectsResp as SupabaseQueryResult },
         { name: "proyectos_tareas_vencidas_rows", result: overdueTasksResp as SupabaseQueryResult }
       ];
@@ -164,7 +193,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
       const financialRows = financialResp.data ?? [];
       const projects = projectsResp.data ?? [];
-      const overdueTaskRows = overdueTasksResp.data ?? [];
+      const overdueTaskRows = (overdueTasksResp.data ?? []).filter(
+        (row: any) => !CLOSED_TASK_STATUSES.has(String(row.status ?? "").toLowerCase())
+      );
       const overdueByProject = overdueTaskRows.reduce(
         (acc, row: any) => {
           const key = String(row.project_id ?? "");
@@ -183,11 +214,16 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         return overdueCount > 0 || vencido || project.priority === "alta";
       });
 
+      const cotizacionesPendientes = (cotizacionesResp.data ?? []).filter((row: any) => {
+        const estado = String(row.estado ?? "").toLowerCase();
+        return estado !== "aprobada" && estado !== "rechazada" && estado !== "vencida";
+      }).length;
+
       kpis = {
         casosAbiertos: abiertos,
         casosVencidos: (overdueAgendaResp.count ?? 0) + overdueTaskRows.length,
         visitasHoy: visitasHoyResp.count ?? 0,
-        cotizacionesPendientes: cotizacionesPendResp.count ?? 0,
+        cotizacionesPendientes,
         ordenesEjecucion: ordenesResp.count ?? 0,
         facturasPendientes: facturasResp.data?.length ?? 0,
         carteraPorCobrar: cartera,
@@ -206,13 +242,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         updated_at: row.updated_at
       }));
 
-      agendaHoy = (agendaResp.data ?? []).map((row: any) => ({
+      agendaHoy = agendaRows.map((row: any) => ({
         id: row.id,
         hora: row.franja_horaria ?? "-",
         tipo: row.tipo_visita ?? "-",
         estado: row.estado_agenda,
-        responsable: (row.profiles as { full_name?: string } | null)?.full_name ?? "-",
-        caso: (row.requerimientos as { codigo_requerimiento?: string } | null)?.codigo_requerimiento ?? "-"
+        responsable: row.tecnico_id ? tecnicoMap.get(row.tecnico_id) ?? "-" : "-",
+        caso: row.requerimiento_id ? requerimientoMap.get(row.requerimiento_id) ?? "-" : "-"
       }));
 
       proyectosRiesgo = criticos.slice(0, 8).map((project: any) => ({

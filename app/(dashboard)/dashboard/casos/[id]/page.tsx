@@ -26,7 +26,7 @@ function dateTimeValue(value: string | null | undefined) {
 
 export default async function CasoDetallePage({ params, searchParams }: CasoDetallePageProps) {
   const permissionContext = await getCurrentUserPermissions();
-  const isClientInmobiliaria = permissionContext.permissions.includes("ver_detalle_caso_cliente");
+  const isClientInmobiliaria = permissionContext.normalizedRole === "cliente_inmobiliaria";
   if (permissionContext.permissions.includes("ver_casos")) {
     await requirePagePermission("ver_casos", "/dashboard", "Acceso denegado para ver el expediente.");
   } else if (permissionContext.permissions.includes("ver_detalle_caso_cliente")) {
@@ -87,7 +87,7 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
   const projectType = projectResp.data?.type ?? null;
   const projectIsInterventoria = projectType === "interventoria" || projectType === "consultoria";
 
-  if (permissionContext.permissions.includes("ver_detalle_caso_cliente")) {
+  if (isClientInmobiliaria) {
     const profileClientId = permissionContext.clientId;
     const belongsToClient = !!profileClientId && (requestClientId === profileClientId || projectClientId === profileClientId);
     if (!belongsToClient) {

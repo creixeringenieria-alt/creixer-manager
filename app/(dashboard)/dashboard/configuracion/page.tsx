@@ -47,7 +47,7 @@ export default async function ConfiguracionPage() {
           <h2>Roles y permisos</h2>
           <p>Matriz de permisos, módulos visibles y acciones permitidas por rol.</p>
         </Link>
-        <Link className="card" href="/perfil">
+        <Link className="card" href="/dashboard/perfil">
           <h2>Mi perfil</h2>
           <p>Datos del usuario actual, rol y empresa/inmobiliaria asociada.</p>
         </Link>
@@ -59,4 +59,3 @@ export default async function ConfiguracionPage() {
     </main>
   );
 }
-

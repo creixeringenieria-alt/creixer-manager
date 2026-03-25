@@ -9,7 +9,7 @@ interface CasosPageProps {
 
 export default async function CasosPage({ searchParams }: CasosPageProps) {
   const permissionContext = await getCurrentUserPermissions();
-  const isClientInmobiliaria = permissionContext.permissions.includes("ver_casos_cliente");
+  const isClientInmobiliaria = permissionContext.normalizedRole === "cliente_inmobiliaria";
   const missingClientAssociation = isClientInmobiliaria && !permissionContext.clientId;
   if (permissionContext.permissions.includes("ver_casos")) {
     await requirePagePermission("ver_casos", "/dashboard", "Acceso denegado: tu rol no puede ver casos.");
@@ -40,7 +40,7 @@ export default async function CasosPage({ searchParams }: CasosPageProps) {
   const casesResp = await query;
   let rows = casesResp.data ?? [];
 
-  if (permissionContext.permissions.includes("ver_casos_cliente")) {
+  if (isClientInmobiliaria) {
     const clientId = permissionContext.clientId;
     if (!clientId) {
       rows = [];

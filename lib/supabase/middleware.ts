@@ -119,6 +119,10 @@ export async function updateSession(request: NextRequest) {
           url.searchParams.set("error", "No se pudo validar tu perfil.");
           return NextResponse.redirect(url);
         }
+        if (isAccessIncompleteRoute) {
+          // Evita loop: permitir abrir /acceso-incompleto aunque falle lectura de perfil.
+          return response;
+        }
         return response;
       }
 
@@ -162,10 +166,9 @@ export async function updateSession(request: NextRequest) {
       }
 
       if (isAccessIncompleteRoute) {
-        const url = request.nextUrl.clone();
-        url.pathname = isProfileComplete ? getRoleHomePath(role) : "/dashboard/perfil/completar";
-        url.searchParams.delete("error");
-        return NextResponse.redirect(url);
+        // Evita loops entre /acceso-incompleto <-> /dashboard/perfil/completar
+        // cuando hay sesión válida pero perfil/complementarios incompletos o consulta inestable.
+        return response;
       }
     }
 

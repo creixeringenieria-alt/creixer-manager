@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { isComplementaryProfileComplete } from "@/lib/auth/profile-completion";
 import { isValidRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 
@@ -27,12 +28,17 @@ export default async function AccessIncompletePage({ searchParams }: AccessIncom
     redirect("/login?error=Debes%20iniciar%20sesi%C3%B3n.");
   }
 
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select(
+      "role, profile_complementary_data(fecha_nacimiento, grupo_sanguineo_rh, eps, arl, fondo_pension, fondo_cesantias, direccion_residencia, ciudad_residencia, contacto_emergencia_nombre, contacto_emergencia_telefono, parentesco_contacto_emergencia, observaciones_medicas_relevantes)"
+    )
+    .eq("id", user.id)
+    .maybeSingle();
   const role = typeof profile?.role === "string" && isValidRole(profile.role) ? profile.role : null;
-
-  if (role) {
-    redirect("/dashboard");
-  }
+  const complementaryRaw = profile?.profile_complementary_data ?? null;
+  const complementary = Array.isArray(complementaryRaw) ? complementaryRaw[0] ?? null : complementaryRaw;
+  const profileComplete = isComplementaryProfileComplete(complementary);
 
   return (
     <main className="login-main">
@@ -41,7 +47,14 @@ export default async function AccessIncompletePage({ searchParams }: AccessIncom
         <h1>Acceso incompleto</h1>
         <p className="login-subtitle">Tu sesión está activa, pero falta perfil o rol en el sistema.</p>
         {params.error ? <p className="feedback error">{params.error}</p> : null}
-        <p className="feedback">Solicita al administrador asignar un rol en `public.profiles` para tu usuario.</p>
+        <p className="feedback">
+          Estado actual: <strong>{role ? `rol ${role}` : "sin rol"}</strong>,{" "}
+          <strong>{profileComplete ? "perfil complementario completo" : "perfil complementario incompleto"}</strong>.
+        </p>
+        <p className="feedback">Si ya tienes rol, puedes completar perfil y continuar manualmente.</p>
+        <p style={{ marginTop: "0.8rem" }}>
+          <Link href="/dashboard/perfil/completar">Completar perfil</Link> | <Link href="/dashboard">Ir al dashboard</Link>
+        </p>
         <form action={cerrarSesionIncompletaAction} className="form-grid">
           <button type="submit">Cerrar sesión</button>
         </form>

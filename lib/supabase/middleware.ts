@@ -68,68 +68,48 @@ export async function updateSession(request: NextRequest) {
     if (user && (isLoginRoute || isDashboardRoute || isAccessIncompleteRoute)) {
       const { data: profile, error: profileError } = (await supabase
         .from("profiles")
-        .select(
-          "role, profile_complementary_data(fecha_nacimiento, grupo_sanguineo_rh, eps, arl, fondo_pension, fondo_cesantias, direccion_residencia, ciudad_residencia, contacto_emergencia_nombre, contacto_emergencia_telefono, parentesco_contacto_emergencia, observaciones_medicas_relevantes)"
-        )
+        .select("role")
         .eq("id", user.id)
         .maybeSingle()) as {
-        data:
-          | {
-              role?: string;
-              profile_complementary_data?:
-                | {
-                    fecha_nacimiento?: string | null;
-                    grupo_sanguineo_rh?: string | null;
-                    eps?: string | null;
-                    arl?: string | null;
-                    fondo_pension?: string | null;
-                    fondo_cesantias?: string | null;
-                    direccion_residencia?: string | null;
-                    ciudad_residencia?: string | null;
-                    contacto_emergencia_nombre?: string | null;
-                    contacto_emergencia_telefono?: string | null;
-                    parentesco_contacto_emergencia?: string | null;
-                    observaciones_medicas_relevantes?: string | null;
-                  }
-                | null
-                | Array<{
-                    fecha_nacimiento?: string | null;
-                    grupo_sanguineo_rh?: string | null;
-                    eps?: string | null;
-                    arl?: string | null;
-                    fondo_pension?: string | null;
-                    fondo_cesantias?: string | null;
-                    direccion_residencia?: string | null;
-                    ciudad_residencia?: string | null;
-                    contacto_emergencia_nombre?: string | null;
-                    contacto_emergencia_telefono?: string | null;
-                    parentesco_contacto_emergencia?: string | null;
-                    observaciones_medicas_relevantes?: string | null;
-                  }>;
-            }
-          | null;
+        data: { role?: string } | null;
         error?: { message?: string } | null;
       };
 
       if (profileError) {
-        console.error("[auth][middleware] profile lookup failed:", profileError.message);
-        if (isDashboardRoute) {
-          const url = request.nextUrl.clone();
-          url.pathname = "/acceso-incompleto";
-          url.searchParams.set("error", "No se pudo validar tu perfil.");
-          return NextResponse.redirect(url);
-        }
-        if (isAccessIncompleteRoute) {
-          // Evita loop: permitir abrir /acceso-incompleto aunque falle lectura de perfil.
-          return response;
-        }
-        return response;
+        console.error("[auth][middleware] profile role lookup failed:", profileError.message);
       }
 
-      const role = typeof profile?.role === "string" && isValidRole(profile.role) ? profile.role : null;
-      const complementaryRaw = profile?.profile_complementary_data ?? null;
-      const complementary = Array.isArray(complementaryRaw) ? complementaryRaw[0] ?? null : complementaryRaw;
-      const isProfileComplete = isComplementaryProfileComplete(complementary);
+      const metadataRole =
+        (typeof user.app_metadata?.role === "string" && isValidRole(user.app_metadata.role)
+          ? user.app_metadata.role
+          : null) ??
+        (typeof user.user_metadata?.role === "string" && isValidRole(user.user_metadata.role)
+          ? user.user_metadata.role
+          : null);
+      const roleFromProfile = typeof profile?.role === "string" && isValidRole(profile.role) ? profile.role : null;
+      const role = roleFromProfile ?? metadataRole;
+
+      let isProfileComplete = false;
+      if (role === "super_admin" || role === "administrador") {
+        isProfileComplete = true;
+      } else {
+        try {
+          const { data: complementaryData, error: complementaryError } = await supabase
+            .from("profile_complementary_data")
+            .select(
+              "fecha_nacimiento, grupo_sanguineo_rh, eps, arl, fondo_pension, fondo_cesantias, direccion_residencia, ciudad_residencia, contacto_emergencia_nombre, contacto_emergencia_telefono, parentesco_contacto_emergencia, observaciones_medicas_relevantes"
+            )
+            .eq("id", user.id)
+            .maybeSingle();
+          if (complementaryError) {
+            console.error("[auth][middleware] complementary profile lookup failed:", complementaryError.message);
+          }
+          isProfileComplete = isComplementaryProfileComplete(complementaryData);
+        } catch (error) {
+          console.error("[auth][middleware] complementary profile lookup unexpected error:", error);
+          isProfileComplete = false;
+        }
+      }
 
       if (!role) {
         console.warn("[auth][middleware] session without valid profile/role", {

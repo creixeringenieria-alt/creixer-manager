@@ -30,15 +30,32 @@ export default async function AccessIncompletePage({ searchParams }: AccessIncom
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select(
-      "role, profile_complementary_data(fecha_nacimiento, grupo_sanguineo_rh, eps, arl, fondo_pension, fondo_cesantias, direccion_residencia, ciudad_residencia, contacto_emergencia_nombre, contacto_emergencia_telefono, parentesco_contacto_emergencia, observaciones_medicas_relevantes)"
-    )
+    .select("role")
     .eq("id", user.id)
     .maybeSingle();
-  const role = typeof profile?.role === "string" && isValidRole(profile.role) ? profile.role : null;
-  const complementaryRaw = profile?.profile_complementary_data ?? null;
-  const complementary = Array.isArray(complementaryRaw) ? complementaryRaw[0] ?? null : complementaryRaw;
-  const profileComplete = isComplementaryProfileComplete(complementary);
+  const roleFromProfile = typeof profile?.role === "string" && isValidRole(profile.role) ? profile.role : null;
+  const metadataRole =
+    (typeof user.app_metadata?.role === "string" && isValidRole(user.app_metadata.role)
+      ? user.app_metadata.role
+      : null) ??
+    (typeof user.user_metadata?.role === "string" && isValidRole(user.user_metadata.role)
+      ? user.user_metadata.role
+      : null);
+  const role = roleFromProfile ?? metadataRole;
+
+  let profileComplete = false;
+  if (role === "super_admin" || role === "administrador") {
+    profileComplete = true;
+  } else {
+    const { data: complementaryData } = await supabase
+      .from("profile_complementary_data")
+      .select(
+        "fecha_nacimiento, grupo_sanguineo_rh, eps, arl, fondo_pension, fondo_cesantias, direccion_residencia, ciudad_residencia, contacto_emergencia_nombre, contacto_emergencia_telefono, parentesco_contacto_emergencia, observaciones_medicas_relevantes"
+      )
+      .eq("id", user.id)
+      .maybeSingle();
+    profileComplete = isComplementaryProfileComplete(complementaryData);
+  }
 
   return (
     <main className="login-main">

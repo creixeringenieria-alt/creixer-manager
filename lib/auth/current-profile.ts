@@ -34,6 +34,11 @@ export async function requireCurrentProfile(): Promise<CurrentProfileResult> {
     redirect("/login?error=Debes iniciar sesión.");
   }
 
+  const basicMeta =
+    typeof user.user_metadata?.basic_profile === "object" && user.user_metadata?.basic_profile
+      ? (user.user_metadata.basic_profile as Record<string, unknown>)
+      : null;
+
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select(
@@ -92,15 +97,21 @@ export async function requireCurrentProfile(): Promise<CurrentProfileResult> {
     email: (user.email as string | null) ?? null,
     fullName:
       (profile?.full_name as string | null) ??
+      (typeof basicMeta?.full_name === "string" ? basicMeta.full_name : null) ??
       (typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : null) ??
       (typeof user.user_metadata?.name === "string" ? user.user_metadata.name : null),
     role,
     clientId: (profile?.client_id as string | null) ?? null,
     clientName: ((profile?.clients as { name?: string } | null)?.name as string | undefined) ?? null,
-    documentType: (profile?.document_type as string | null) ?? null,
-    documentNumber: (profile?.document_number as string | null) ?? null,
+    documentType:
+      (profile?.document_type as string | null) ??
+      (typeof basicMeta?.document_type === "string" ? basicMeta.document_type : null),
+    documentNumber:
+      (profile?.document_number as string | null) ??
+      (typeof basicMeta?.document_number === "string" ? basicMeta.document_number : null),
     phone:
       (profile?.phone as string | null) ??
+      (typeof basicMeta?.phone === "string" ? basicMeta.phone : null) ??
       (typeof user.user_metadata?.phone === "string" ? user.user_metadata.phone : null),
     isActive: Boolean(profile?.is_active ?? true),
     basicDataLocked: Boolean(profile?.basic_data_locked ?? false),

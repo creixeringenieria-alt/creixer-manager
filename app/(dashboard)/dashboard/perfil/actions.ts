@@ -122,7 +122,21 @@ export async function updateOwnBasicProfileAction(formData: FormData) {
   const updates = filterUpdatesByAvailableColumns(rawUpdates, availableColumns);
 
   const { error } = await upsertProfileWithFallback(admin, updates);
-  if (error) {
+  const currentMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const basicProfileMeta = {
+    full_name: textValue(formData, "full_name"),
+    phone: textValue(formData, "phone"),
+    document_type: textValue(formData, "document_type"),
+    document_number: textValue(formData, "document_number")
+  };
+  const { error: metadataError } = await admin.auth.admin.updateUserById(user.id, {
+    user_metadata: {
+      ...currentMeta,
+      basic_profile: basicProfileMeta
+    }
+  });
+
+  if (error && metadataError) {
     if (String(error.message ?? "").includes("document_number")) {
       redirect(
         `${redirectTo}?error=${encodeURIComponent(
@@ -183,41 +197,37 @@ export async function updateOwnComplementaryProfileAction(formData: FormData) {
 
   const admin = createAdminClient() as any;
   const { error } = await admin.from("profile_complementary_data").upsert(payload, { onConflict: "id" });
-  if (error) {
+  const currentMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const nextMeta = {
+    ...currentMeta,
+    complementary_profile: {
+      fecha_nacimiento: payload.fecha_nacimiento,
+      grupo_sanguineo_rh: payload.grupo_sanguineo_rh,
+      eps: payload.eps,
+      arl: payload.arl,
+      fondo_pension: payload.fondo_pension,
+      fondo_cesantias: payload.fondo_cesantias,
+      direccion_residencia: payload.direccion_residencia,
+      ciudad_residencia: payload.ciudad_residencia,
+      contacto_emergencia_nombre: payload.contacto_emergencia_nombre,
+      contacto_emergencia_telefono: payload.contacto_emergencia_telefono,
+      parentesco_contacto_emergencia: payload.parentesco_contacto_emergencia,
+      observaciones_medicas_relevantes: payload.observaciones_medicas_relevantes
+    }
+  };
+  const { error: metaError } = await admin.auth.admin.updateUserById(user.id, { user_metadata: nextMeta });
+
+  if (error && metaError) {
     const message = String(error.message ?? "");
     const missingTable = message.includes("Could not find the table 'public.profile_complementary_data'");
     if (!missingTable) {
       redirect(`${redirectTo}?error=${encodeURIComponent(`No se pudo guardar perfil complementario: ${error.message}`)}`);
     }
-
-    // Fallback de compatibilidad: guarda temporalmente en user_metadata si la tabla aún no existe.
-    const currentMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
-    const nextMeta = {
-      ...currentMeta,
-      complementary_profile: {
-        fecha_nacimiento: payload.fecha_nacimiento,
-        grupo_sanguineo_rh: payload.grupo_sanguineo_rh,
-        eps: payload.eps,
-        arl: payload.arl,
-        fondo_pension: payload.fondo_pension,
-        fondo_cesantias: payload.fondo_cesantias,
-        direccion_residencia: payload.direccion_residencia,
-        ciudad_residencia: payload.ciudad_residencia,
-        contacto_emergencia_nombre: payload.contacto_emergencia_nombre,
-        contacto_emergencia_telefono: payload.contacto_emergencia_telefono,
-        parentesco_contacto_emergencia: payload.parentesco_contacto_emergencia,
-        observaciones_medicas_relevantes: payload.observaciones_medicas_relevantes
-      }
-    };
-
-    const { error: metaError } = await admin.auth.admin.updateUserById(user.id, { user_metadata: nextMeta });
-    if (metaError) {
-      redirect(
-        `${redirectTo}?error=${encodeURIComponent(
-          `No se pudo guardar perfil complementario (tabla ausente y fallback falló): ${metaError.message}`
-        )}`
-      );
-    }
+    redirect(
+      `${redirectTo}?error=${encodeURIComponent(
+        `No se pudo guardar perfil complementario (tabla ausente y fallback falló): ${metaError.message}`
+      )}`
+    );
   }
 
   revalidatePath("/dashboard/perfil");

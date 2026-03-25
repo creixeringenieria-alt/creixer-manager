@@ -121,7 +121,24 @@ export async function adminUpdateUserBasicDataAction(formData: FormData) {
   const availableColumns = await getProfilesAvailableColumns(supabase);
   const updates = filterUpdatesByAvailableColumns(rawUpdates, availableColumns);
   const { error } = await updateProfileWithFallback(supabase, profileId, updates);
-  if (error) {
+  const { data: authUser } = await supabase.auth.admin.getUserById(profileId);
+  const currentMeta =
+    authUser?.user?.user_metadata && typeof authUser.user.user_metadata === "object"
+      ? (authUser.user.user_metadata as Record<string, unknown>)
+      : {};
+  const { error: metadataError } = await supabase.auth.admin.updateUserById(profileId, {
+    user_metadata: {
+      ...currentMeta,
+      basic_profile: {
+        full_name: textValue(formData, "full_name"),
+        phone: textValue(formData, "phone"),
+        document_type: textValue(formData, "document_type"),
+        document_number: textValue(formData, "document_number")
+      }
+    }
+  });
+
+  if (error && metadataError) {
     redirect(`/dashboard/configuracion/usuarios?error=${encodeURIComponent(`No se pudo actualizar usuario: ${error.message}`)}`);
   }
 

@@ -62,7 +62,11 @@ export async function requireCurrentProfile(): Promise<CurrentProfileResult> {
 
   let complementary: ComplementaryProfileData | null = null;
   if (role === "super_admin" || role === "administrador") {
-    complementary = null;
+    const metaComplementary =
+      typeof user.user_metadata?.complementary_profile === "object" && user.user_metadata?.complementary_profile
+        ? (user.user_metadata.complementary_profile as ComplementaryProfileData)
+        : null;
+    complementary = metaComplementary;
   } else {
     const { data: complementaryData, error: complementaryError } = await supabase
       .from("profile_complementary_data")
@@ -75,7 +79,12 @@ export async function requireCurrentProfile(): Promise<CurrentProfileResult> {
     if (complementaryError) {
       console.error("[auth][current-profile] complementary profile lookup failed", complementaryError.message);
     }
-    complementary = (complementaryData as ComplementaryProfileData | null) ?? null;
+    const dbComplementary = (complementaryData as ComplementaryProfileData | null) ?? null;
+    const metaComplementary =
+      typeof user.user_metadata?.complementary_profile === "object" && user.user_metadata?.complementary_profile
+        ? (user.user_metadata.complementary_profile as ComplementaryProfileData)
+        : null;
+    complementary = dbComplementary ?? metaComplementary;
   }
 
   return {

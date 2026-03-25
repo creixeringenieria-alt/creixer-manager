@@ -184,7 +184,40 @@ export async function updateOwnComplementaryProfileAction(formData: FormData) {
   const admin = createAdminClient() as any;
   const { error } = await admin.from("profile_complementary_data").upsert(payload, { onConflict: "id" });
   if (error) {
-    redirect(`${redirectTo}?error=${encodeURIComponent(`No se pudo guardar perfil complementario: ${error.message}`)}`);
+    const message = String(error.message ?? "");
+    const missingTable = message.includes("Could not find the table 'public.profile_complementary_data'");
+    if (!missingTable) {
+      redirect(`${redirectTo}?error=${encodeURIComponent(`No se pudo guardar perfil complementario: ${error.message}`)}`);
+    }
+
+    // Fallback de compatibilidad: guarda temporalmente en user_metadata si la tabla aún no existe.
+    const currentMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
+    const nextMeta = {
+      ...currentMeta,
+      complementary_profile: {
+        fecha_nacimiento: payload.fecha_nacimiento,
+        grupo_sanguineo_rh: payload.grupo_sanguineo_rh,
+        eps: payload.eps,
+        arl: payload.arl,
+        fondo_pension: payload.fondo_pension,
+        fondo_cesantias: payload.fondo_cesantias,
+        direccion_residencia: payload.direccion_residencia,
+        ciudad_residencia: payload.ciudad_residencia,
+        contacto_emergencia_nombre: payload.contacto_emergencia_nombre,
+        contacto_emergencia_telefono: payload.contacto_emergencia_telefono,
+        parentesco_contacto_emergencia: payload.parentesco_contacto_emergencia,
+        observaciones_medicas_relevantes: payload.observaciones_medicas_relevantes
+      }
+    };
+
+    const { error: metaError } = await admin.auth.admin.updateUserById(user.id, { user_metadata: nextMeta });
+    if (metaError) {
+      redirect(
+        `${redirectTo}?error=${encodeURIComponent(
+          `No se pudo guardar perfil complementario (tabla ausente y fallback falló): ${metaError.message}`
+        )}`
+      );
+    }
   }
 
   revalidatePath("/dashboard/perfil");

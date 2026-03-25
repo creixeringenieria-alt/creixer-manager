@@ -37,6 +37,32 @@ function filterUpdatesByAvailableColumns(raw: Record<string, unknown>, available
   return Object.fromEntries(Object.entries(raw).filter(([key]) => key === "id" || availableColumns.has(key)));
 }
 
+function getMissingColumnFromErrorMessage(message: string | undefined) {
+  if (!message) return null;
+  const match = message.match(/Could not find the '([^']+)' column/i);
+  return match?.[1] ?? null;
+}
+
+async function updateProfileWithFallback(admin: any, profileId: string, payload: Record<string, unknown>) {
+  const updates = { ...payload };
+
+  for (let i = 0; i < 8; i += 1) {
+    const { error } = await admin.from("profiles").update(updates).eq("id", profileId);
+    if (!error) {
+      return { error: null };
+    }
+
+    const missingColumn = getMissingColumnFromErrorMessage(error.message);
+    if (!missingColumn || !(missingColumn in updates)) {
+      return { error };
+    }
+
+    delete updates[missingColumn];
+  }
+
+  return { error: { message: "No se pudo actualizar usuario por columnas faltantes en profiles." } };
+}
+
 export async function adminUpdateUserBasicDataAction(formData: FormData) {
   const { userId, normalizedRole } = await getCurrentUserPermissions();
   if (!userId) {
@@ -94,7 +120,7 @@ export async function adminUpdateUserBasicDataAction(formData: FormData) {
   const supabase = createAdminClient() as any;
   const availableColumns = await getProfilesAvailableColumns(supabase);
   const updates = filterUpdatesByAvailableColumns(rawUpdates, availableColumns);
-  const { error } = await supabase.from("profiles").update(updates).eq("id", profileId);
+  const { error } = await updateProfileWithFallback(supabase, profileId, updates);
   if (error) {
     redirect(`/dashboard/configuracion/usuarios?error=${encodeURIComponent(`No se pudo actualizar usuario: ${error.message}`)}`);
   }

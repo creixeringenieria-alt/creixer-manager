@@ -45,6 +45,32 @@ function filterUpdatesByAvailableColumns(raw: Record<string, unknown>, available
   return Object.fromEntries(Object.entries(raw).filter(([key]) => key === "id" || availableColumns.has(key)));
 }
 
+function getMissingColumnFromErrorMessage(message: string | undefined) {
+  if (!message) return null;
+  const match = message.match(/Could not find the '([^']+)' column/i);
+  return match?.[1] ?? null;
+}
+
+async function upsertProfileWithFallback(admin: any, payload: Record<string, unknown>) {
+  const updates = { ...payload };
+
+  for (let i = 0; i < 8; i += 1) {
+    const { error } = await admin.from("profiles").upsert(updates, { onConflict: "id" });
+    if (!error) {
+      return { error: null };
+    }
+
+    const missingColumn = getMissingColumnFromErrorMessage(error.message);
+    if (!missingColumn || !(missingColumn in updates)) {
+      return { error };
+    }
+
+    delete updates[missingColumn];
+  }
+
+  return { error: { message: "No se pudo guardar por columnas faltantes en profiles." } };
+}
+
 export async function updateOwnBasicProfileAction(formData: FormData) {
   const redirectTo = sanitizeRedirect(formData.get("redirect_to"));
   const supabase = (await createClient()) as any;
@@ -95,7 +121,7 @@ export async function updateOwnBasicProfileAction(formData: FormData) {
   };
   const updates = filterUpdatesByAvailableColumns(rawUpdates, availableColumns);
 
-  const { error } = await admin.from("profiles").upsert(updates, { onConflict: "id" });
+  const { error } = await upsertProfileWithFallback(admin, updates);
   if (error) {
     if (String(error.message ?? "").includes("document_number")) {
       redirect(

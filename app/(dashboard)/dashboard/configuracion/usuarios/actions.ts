@@ -48,7 +48,9 @@ export async function adminUpdateUserBasicDataAction(formData: FormData) {
     phone: textValue(formData, "phone"),
     document_type: textValue(formData, "document_type"),
     document_number: textValue(formData, "document_number"),
-    is_active: formData.get("is_active") === "true"
+    is_active: formData.get("is_active") === "true",
+    basic_data_locked: true,
+    basic_data_locked_at: new Date().toISOString()
   };
 
   const userTypeRaw = textValue(formData, "user_type") ?? "colaborador_creixer";

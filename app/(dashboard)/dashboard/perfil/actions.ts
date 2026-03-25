@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { isValidRole } from "@/lib/auth/roles";
 
 function textValue(formData: FormData, key: string, required = false) {
   const value = formData.get(key);
@@ -49,12 +50,26 @@ export async function updateOwnBasicProfileAction(formData: FormData) {
 
   const admin = createAdminClient() as any;
   const availableColumns = await getProfilesAvailableColumns(admin);
+  const { data: currentProfile } = await admin
+    .from("profiles")
+    .select("role, basic_data_locked")
+    .eq("id", user.id)
+    .maybeSingle();
+  const currentRole = typeof currentProfile?.role === "string" && isValidRole(currentProfile.role) ? currentProfile.role : null;
+  const isSuperAdmin = currentRole === "super_admin" || currentRole === "administrador";
+  const isLocked = Boolean(currentProfile?.basic_data_locked ?? false);
+
+  if (isLocked && !isSuperAdmin) {
+    redirect(`${redirectTo}?error=${encodeURIComponent("Tus datos básicos están bloqueados. Solo super_admin puede editarlos.")}`);
+  }
 
   const rawUpdates = {
     full_name: textValue(formData, "full_name"),
     phone: textValue(formData, "phone"),
     document_type: textValue(formData, "document_type"),
-    document_number: textValue(formData, "document_number")
+    document_number: textValue(formData, "document_number"),
+    basic_data_locked: true,
+    basic_data_locked_at: new Date().toISOString()
   };
   const updates = Object.fromEntries(Object.entries(rawUpdates).filter(([key]) => availableColumns.has(key)));
 

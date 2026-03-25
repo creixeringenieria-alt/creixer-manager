@@ -15,6 +15,8 @@ interface CurrentProfileResult {
   documentNumber: string | null;
   phone: string | null;
   isActive: boolean;
+  basicDataLocked: boolean;
+  basicDataLockedAt: string | null;
   userType: "colaborador_creixer" | "usuario_inmobiliaria";
   organizationName: string | null;
   complementary: ComplementaryProfileData | null;
@@ -34,7 +36,9 @@ export async function requireCurrentProfile(): Promise<CurrentProfileResult> {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("full_name, role, client_id, user_type, organization_name, document_type, document_number, phone, is_active, clients(name)")
+    .select(
+      "full_name, role, client_id, user_type, organization_name, document_type, document_number, phone, is_active, basic_data_locked, basic_data_locked_at, clients(name)"
+    )
     .eq("id", user.id)
     .maybeSingle();
 
@@ -85,6 +89,8 @@ export async function requireCurrentProfile(): Promise<CurrentProfileResult> {
     documentNumber: (profile?.document_number as string | null) ?? null,
     phone: (profile?.phone as string | null) ?? null,
     isActive: Boolean(profile?.is_active ?? true),
+    basicDataLocked: Boolean(profile?.basic_data_locked ?? false),
+    basicDataLockedAt: (profile?.basic_data_locked_at as string | null) ?? null,
     userType:
       profile?.user_type === "usuario_inmobiliaria" || profile?.user_type === "colaborador_creixer"
         ? profile.user_type

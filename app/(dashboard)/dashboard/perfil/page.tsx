@@ -15,6 +15,8 @@ export default async function PerfilDashboardPage({ searchParams }: PerfilDashbo
   const params = await searchParams;
   const profile = await requireCurrentProfile();
   const complementary = profile.complementary;
+  const isSuperAdmin = profile.role === "super_admin" || profile.role === "administrador";
+  const canEditBasicData = isSuperAdmin || !profile.basicDataLocked;
 
   return (
     <main>
@@ -28,6 +30,11 @@ export default async function PerfilDashboardPage({ searchParams }: PerfilDashbo
 
       {params.error ? <p className="feedback error">{params.error}</p> : null}
       {params.ok ? <p className="feedback success">{params.ok}</p> : null}
+      {!canEditBasicData ? (
+        <p className="feedback">
+          Tus datos básicos ya fueron guardados y quedaron bloqueados. Solo un super_admin puede editarlos.
+        </p>
+      ) : null}
 
       <section className="card">
         <h2 style={{ marginTop: 0 }}>Datos básicos de usuario</h2>
@@ -35,7 +42,7 @@ export default async function PerfilDashboardPage({ searchParams }: PerfilDashbo
           <input type="hidden" name="redirect_to" value="/dashboard/perfil" />
           <div className="form-field">
             <label htmlFor="full_name">Nombre completo</label>
-            <input id="full_name" name="full_name" defaultValue={profile.fullName ?? ""} />
+            <input id="full_name" name="full_name" defaultValue={profile.fullName ?? ""} readOnly={!canEditBasicData} />
           </div>
           <div className="form-field">
             <label htmlFor="email_readonly">Correo</label>
@@ -67,11 +74,11 @@ export default async function PerfilDashboardPage({ searchParams }: PerfilDashbo
           </div>
           <div className="form-field">
             <label htmlFor="phone">Teléfono</label>
-            <input id="phone" name="phone" defaultValue={profile.phone ?? ""} />
+            <input id="phone" name="phone" defaultValue={profile.phone ?? ""} readOnly={!canEditBasicData} />
           </div>
           <div className="form-field">
             <label htmlFor="document_type">Tipo de documento</label>
-            <select id="document_type" name="document_type" defaultValue={profile.documentType ?? ""}>
+            <select id="document_type" name="document_type" defaultValue={profile.documentType ?? ""} disabled={!canEditBasicData}>
               <option value="">Seleccionar</option>
               <option value="Cédula de ciudadanía">Cédula de ciudadanía</option>
               <option value="PPT">PPT</option>
@@ -80,9 +87,14 @@ export default async function PerfilDashboardPage({ searchParams }: PerfilDashbo
           </div>
           <div className="form-field">
             <label htmlFor="document_number">Número de documento</label>
-            <input id="document_number" name="document_number" defaultValue={profile.documentNumber ?? ""} />
+            <input
+              id="document_number"
+              name="document_number"
+              defaultValue={profile.documentNumber ?? ""}
+              readOnly={!canEditBasicData}
+            />
           </div>
-          <button type="submit">Guardar datos básicos</button>
+          {canEditBasicData ? <button type="submit">Guardar datos básicos</button> : null}
         </form>
       </section>
 

@@ -17,6 +17,7 @@ interface UserRow {
   document_number: string | null;
   phone: string | null;
   is_active: boolean | null;
+  basic_data_locked: boolean | null;
   created_at: string;
   clients: { name?: string } | null;
   profile_complementary_data:
@@ -67,7 +68,7 @@ export default async function ConfiguracionUsuariosPage() {
     supabase
       .from("profiles")
       .select(
-        "id, full_name, role, user_type, organization_name, client_id, clients(name), document_type, document_number, phone, is_active, created_at, profile_complementary_data(fecha_nacimiento, grupo_sanguineo_rh, eps, arl, fondo_pension, fondo_cesantias, direccion_residencia, ciudad_residencia, contacto_emergencia_nombre, contacto_emergencia_telefono, parentesco_contacto_emergencia)"
+        "id, full_name, role, user_type, organization_name, client_id, clients(name), document_type, document_number, phone, is_active, basic_data_locked, created_at, profile_complementary_data(fecha_nacimiento, grupo_sanguineo_rh, eps, arl, fondo_pension, fondo_cesantias, direccion_residencia, ciudad_residencia, contacto_emergencia_nombre, contacto_emergencia_telefono, parentesco_contacto_emergencia)"
       )
       .order("created_at", { ascending: false })
       .limit(200),
@@ -98,6 +99,7 @@ export default async function ConfiguracionUsuariosPage() {
                 <th>Documento</th>
                 <th>Teléfono</th>
                 <th>Activo</th>
+                <th>Edición básica</th>
                 <th>Perfil</th>
                 <th>ID</th>
                 <th>Acciones</th>
@@ -122,6 +124,7 @@ export default async function ConfiguracionUsuariosPage() {
                     <td>{[user.document_type, user.document_number].filter(Boolean).join(": ") || "-"}</td>
                     <td>{user.phone ?? "-"}</td>
                     <td>{user.is_active === false ? "No" : "Sí"}</td>
+                    <td>{user.basic_data_locked ? "Solo super_admin" : "Abierta"}</td>
                     <td>{complete ? "Completo" : "Incompleto"}</td>
                     <td>{user.id}</td>
                     <td>

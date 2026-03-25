@@ -140,7 +140,12 @@ export default async function ConfiguracionUsuariosPage() {
                             </div>
                             <div className="form-field">
                               <label htmlFor={`document_type-${user.id}`}>Tipo documento</label>
-                              <input id={`document_type-${user.id}`} name="document_type" defaultValue={user.document_type ?? ""} />
+                              <select id={`document_type-${user.id}`} name="document_type" defaultValue={user.document_type ?? ""}>
+                                <option value="">Seleccionar</option>
+                                <option value="Cédula de ciudadanía">Cédula de ciudadanía</option>
+                                <option value="PPT">PPT</option>
+                                <option value="Cédula de extranjería">Cédula de extranjería</option>
+                              </select>
                             </div>
                             <div className="form-field">
                               <label htmlFor={`document_number-${user.id}`}>Número documento</label>

@@ -71,7 +71,12 @@ export default async function PerfilDashboardPage({ searchParams }: PerfilDashbo
           </div>
           <div className="form-field">
             <label htmlFor="document_type">Tipo de documento</label>
-            <input id="document_type" name="document_type" defaultValue={profile.documentType ?? ""} />
+            <select id="document_type" name="document_type" defaultValue={profile.documentType ?? ""}>
+              <option value="">Seleccionar</option>
+              <option value="Cédula de ciudadanía">Cédula de ciudadanía</option>
+              <option value="PPT">PPT</option>
+              <option value="Cédula de extranjería">Cédula de extranjería</option>
+            </select>
           </div>
           <div className="form-field">
             <label htmlFor="document_number">Número de documento</label>

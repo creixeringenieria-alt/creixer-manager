@@ -6,6 +6,7 @@ import {
   updateOwnBasicProfileAction,
   updateOwnComplementaryProfileAction
 } from "@/app/(dashboard)/dashboard/perfil/actions";
+import { COLOMBIA_CITIES } from "@/lib/constants/colombia-cities";
 
 interface PerfilDashboardPageProps {
   searchParams: Promise<{ ok?: string; error?: string }>;
@@ -15,6 +16,8 @@ export default async function PerfilDashboardPage({ searchParams }: PerfilDashbo
   const params = await searchParams;
   const profile = await requireCurrentProfile();
   const complementary = profile.complementary;
+  const currentCity = complementary?.ciudad_residencia ?? "";
+  const cityExists = COLOMBIA_CITIES.includes(currentCity as (typeof COLOMBIA_CITIES)[number]);
   const isSuperAdmin = profile.role === "super_admin" || profile.role === "administrador";
   const canEditBasicData = isSuperAdmin || !profile.basicDataLocked;
 
@@ -133,7 +136,7 @@ export default async function PerfilDashboardPage({ searchParams }: PerfilDashbo
           </div>
           <div className="form-field">
             <label htmlFor="arl">ARL</label>
-            <input id="arl" name="arl" defaultValue={complementary?.arl ?? ""} required />
+            <input id="arl" name="arl" value="SURA" readOnly required />
           </div>
           <div className="form-field">
             <label htmlFor="fondo_pension">Fondo de pensión</label>
@@ -154,7 +157,15 @@ export default async function PerfilDashboardPage({ searchParams }: PerfilDashbo
           </div>
           <div className="form-field">
             <label htmlFor="ciudad_residencia">Ciudad de residencia</label>
-            <input id="ciudad_residencia" name="ciudad_residencia" defaultValue={complementary?.ciudad_residencia ?? ""} required />
+            <select id="ciudad_residencia" name="ciudad_residencia" defaultValue={currentCity} required>
+              <option value="">Seleccionar ciudad</option>
+              {!cityExists && currentCity ? <option value={currentCity}>{currentCity}</option> : null}
+              {COLOMBIA_CITIES.map((city) => (
+                <option key={city} value={city}>
+                  {city}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="form-field">
             <label htmlFor="contacto_emergencia_nombre">Contacto de emergencia</label>

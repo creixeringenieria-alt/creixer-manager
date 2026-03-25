@@ -131,11 +131,10 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url);
       }
 
+      // Permitir abrir /dashboard/perfil/completar incluso si el perfil ya está completo.
+      // Esto evita bloquear la edición manual de datos complementarios.
       if (isProfileComplete && isProfileCompleteRoute) {
-        const url = request.nextUrl.clone();
-        url.pathname = getRoleHomePath(role);
-        url.searchParams.delete("error");
-        return NextResponse.redirect(url);
+        return response;
       }
 
       if (isLoginRoute) {

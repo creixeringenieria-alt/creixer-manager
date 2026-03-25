@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-
 import { requireCurrentProfile } from "@/lib/auth/current-profile";
 
 import { updateOwnComplementaryProfileAction } from "@/app/(dashboard)/dashboard/perfil/actions";
@@ -12,10 +10,6 @@ export default async function CompletarPerfilPage({ searchParams }: CompletarPer
   const params = await searchParams;
   const profile = await requireCurrentProfile();
   const complementary = profile.complementary;
-
-  if (profile.profileComplete) {
-    redirect("/dashboard");
-  }
 
   return (
     <main>
@@ -37,6 +31,11 @@ export default async function CompletarPerfilPage({ searchParams }: CompletarPer
 
         {params.error ? <p className="feedback error">{params.error}</p> : null}
         {params.ok ? <p className="feedback success">{params.ok}</p> : null}
+        {profile.profileComplete ? (
+          <p className="feedback success">
+            Tu perfil ya está completo. Puedes actualizar datos aquí cuando lo necesites.
+          </p>
+        ) : null}
 
         <form action={updateOwnComplementaryProfileAction} className="form-grid">
           <input type="hidden" name="redirect_to" value="/dashboard/perfil/completar" />

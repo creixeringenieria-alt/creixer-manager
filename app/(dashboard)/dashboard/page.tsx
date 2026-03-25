@@ -10,6 +10,12 @@ interface DashboardPageProps {
   searchParams: Promise<{ ok?: string; error?: string }>;
 }
 
+interface SupabaseQueryResult<T = any> {
+  data: T;
+  error: { message?: string; code?: string; details?: string; hint?: string } | null;
+  count?: number | null;
+}
+
 function currency(value: number) {
   return value.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 }
@@ -40,7 +46,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     redirect("/acceso-incompleto?error=No%20se%20encontr%C3%B3%20perfil%20de%20rol%20para%20este%20usuario.");
   }
 
-  if (visibleRole === "tecnico") {
+  if (visibleRole === "tecnico" || visibleRole === "cliente_inmobiliaria") {
     redirect(`${getRoleHomePath(role)}?ok=${encodeURIComponent("Redirección automática según tu rol.")}`);
   }
 
@@ -69,6 +75,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   let agendaHoy: any[] = [];
   let proyectosRiesgo: any[] = [];
   let dashboardDataError: string | null = null;
+  let dashboardFailedQueries: string[] = [];
 
   if (showExecutive) {
     try {
@@ -127,25 +134,32 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             .lt("planned_end_date", todayDate)
             .not("status", "in", "(completada,finalizada,cerrada)")
         ]);
+      const queryMap: Array<{ name: string; result: SupabaseQueryResult }> = [
+        { name: "financial_kpi_base", result: financialResp as SupabaseQueryResult },
+        { name: "agenda_vencida_count", result: overdueAgendaResp as SupabaseQueryResult },
+        { name: "agenda_hoy_count", result: visitasHoyResp as SupabaseQueryResult },
+        { name: "cotizaciones_pendientes_count", result: cotizacionesPendResp as SupabaseQueryResult },
+        { name: "ordenes_en_ejecucion_count", result: ordenesResp as SupabaseQueryResult },
+        { name: "facturas_pendientes_rows", result: facturasResp as SupabaseQueryResult },
+        { name: "casos_recientes_rows", result: casosResp as SupabaseQueryResult },
+        { name: "agenda_hoy_rows", result: agendaResp as SupabaseQueryResult },
+        { name: "proyectos_rows", result: projectsResp as SupabaseQueryResult },
+        { name: "proyectos_tareas_vencidas_rows", result: overdueTasksResp as SupabaseQueryResult }
+      ];
 
-      const queryErrors = [
-        financialResp.error,
-        overdueAgendaResp.error,
-        visitasHoyResp.error,
-        cotizacionesPendResp.error,
-        ordenesResp.error,
-        facturasResp.error,
-        casosResp.error,
-        agendaResp.error,
-        projectsResp.error,
-        overdueTasksResp.error
-      ]
-        .filter(Boolean)
-        .map((err: any) => err?.message)
-        .join(" | ");
-      if (queryErrors) {
-        console.error("[dashboard] query errors:", queryErrors);
-        dashboardDataError = "No se pudo cargar parte de los indicadores. Revisa configuración de base de datos y permisos.";
+      const failed = queryMap
+        .filter((entry) => !!entry.result.error)
+        .map((entry) => ({
+          name: entry.name,
+          message: entry.result.error?.message ?? "unknown_error",
+          code: entry.result.error?.code ?? "n/a",
+          hint: entry.result.error?.hint ?? "n/a",
+          details: entry.result.error?.details ?? "n/a"
+        }));
+      if (failed.length > 0) {
+        dashboardFailedQueries = failed.map((item) => item.name);
+        console.error("[dashboard] failed KPI queries", failed);
+        dashboardDataError = `No se pudo cargar parte de indicadores. Queries fallidas: ${dashboardFailedQueries.join(", ")}`;
       }
 
       const financialRows = financialResp.data ?? [];
@@ -224,6 +238,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       {params.error ? <p className="feedback error">{params.error}</p> : null}
       {params.ok ? <p className="feedback success">{params.ok}</p> : null}
       {dashboardDataError ? <p className="feedback error">{dashboardDataError}</p> : null}
+      {dashboardFailedQueries.length > 0 ? (
+        <p className="feedback error">
+          Error técnico puntual en: <strong>{dashboardFailedQueries.join(", ")}</strong>
+        </p>
+      ) : null}
 
       {!showExecutive ? (
         <p className="feedback">Tu perfil no tiene acceso al dashboard gerencial. Usa Mis tareas para operación diaria.</p>

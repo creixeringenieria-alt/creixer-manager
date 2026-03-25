@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { getCurrentUserRole } from "@/lib/auth/permissions";
+import { logoutAction } from "@/app/(dashboard)/actions";
+import { requireCurrentProfile } from "@/lib/auth/current-profile";
 import { getHeaderNavGroupsByRole } from "@/lib/navigation/dashboard";
 
 export default async function DashboardLayout({
@@ -8,8 +9,11 @@ export default async function DashboardLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const { role } = await getCurrentUserRole();
+  const profile = await requireCurrentProfile();
+  const { role } = profile;
   const navItems = getHeaderNavGroupsByRole(role);
+  const displayName = profile.fullName || profile.email || "Usuario";
+  const empresa = profile.clientName ?? null;
 
   return (
     <>
@@ -21,13 +25,30 @@ export default async function DashboardLayout({
             <p className="app-shell-subtitle">Operación técnica</p>
           </div>
         </div>
-        <nav className="app-shell-nav">
-          {navItems.map((item) => (
-            <Link key={item.id} href={item.href}>
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="app-shell-right">
+          <nav className="app-shell-nav">
+            {navItems.map((item) => (
+              <Link key={item.id} href={item.href}>
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+          <details className="user-menu">
+            <summary>
+              <span className="user-name">{displayName}</span>
+              <span className="user-role">{role}</span>
+              <span className="user-company">{empresa ?? "Sin inmobiliaria asociada"}</span>
+            </summary>
+            <div className="user-menu-dropdown">
+              <Link href="/perfil">Mi perfil</Link>
+              <Link href="/dashboard/configuracion">Configuración</Link>
+              <Link href="/dashboard/configuracion/roles-accesos">Roles y accesos</Link>
+              <form action={logoutAction}>
+                <button type="submit">Cerrar sesión</button>
+              </form>
+            </div>
+          </details>
+        </div>
       </header>
       {children}
     </>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { requirePageAccess } from "@/lib/auth/permissions";
+import { normalizeRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 
 import { marcarEstadoTareaAction, subirFotoTareaAction } from "./actions";
@@ -19,6 +20,8 @@ export default async function MisTareasPage({ searchParams }: MisTareasPageProps
     "/dashboard",
     "Acceso denegado: este módulo es para técnico y administrador."
   );
+  const normalizedRole = normalizeRole(role);
+  const isTecnico = normalizedRole === "tecnico";
 
   const params = await searchParams;
   const supabase = (await createClient()) as any;
@@ -53,7 +56,7 @@ export default async function MisTareasPage({ searchParams }: MisTareasPageProps
     .order("fecha_programada", { ascending: true })
     .order("franja_horaria", { ascending: true });
 
-  if (role === "tecnico") {
+  if (isTecnico) {
     agendaQuery = agendaQuery.eq("tecnico_id", user.id).in("fecha_programada", [todayStr, tomorrowStr]);
   } else {
     const periodo = params.periodo ?? "semana";
@@ -73,7 +76,7 @@ export default async function MisTareasPage({ searchParams }: MisTareasPageProps
   const [agendaResp, usersResp, projectTasksResp] = await Promise.all([
     agendaQuery,
     supabase.from("profiles").select("id, full_name, role").eq("role", "tecnico").order("full_name"),
-    role === "administrador"
+    normalizedRole === "super_admin"
       ? supabase
           .from("technical_project_tasks")
           .select(
@@ -88,7 +91,7 @@ export default async function MisTareasPage({ searchParams }: MisTareasPageProps
   const tasksToday = rows.filter((item) => item.fecha_programada === todayStr);
   const tasksTomorrow = rows.filter((item) => item.fecha_programada === tomorrowStr);
 
-  if (role === "tecnico") {
+  if (isTecnico) {
     return (
       <main className="mobile-main">
         <div className="page-header">

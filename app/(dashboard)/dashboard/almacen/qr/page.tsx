@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requirePageAccess } from "@/lib/auth/permissions";
+import { requirePagePermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 interface QrPageProps {
@@ -8,7 +8,7 @@ interface QrPageProps {
 }
 
 export default async function QrPage({ searchParams }: QrPageProps) {
-  await requirePageAccess(["administrador", "asistente", "tecnico"], "/dashboard", "Acceso denegado a vista QR.");
+  await requirePagePermission("ver_inventario", "/dashboard", "Acceso denegado a vista QR.");
 
   const params = await searchParams;
   const codigo = (params.codigo ?? "").trim();

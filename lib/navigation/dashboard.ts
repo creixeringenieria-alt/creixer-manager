@@ -8,7 +8,8 @@ type CoreRole =
   | "contable"
   | "almacen"
   | "lider_operativo"
-  | "tecnico";
+  | "tecnico"
+  | "cliente_inmobiliaria";
 
 export interface DashboardNavItem {
   id: string;
@@ -33,11 +34,11 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
     id: "inicio",
     label: "Inicio",
     href: "/dashboard",
-    roles: ["super_admin", "gerente_operativo", "administrativo", "contable", "almacen", "lider_operativo", "tecnico"],
+    roles: ["super_admin", "gerente_operativo", "administrativo", "contable", "almacen", "lider_operativo", "tecnico", "cliente_inmobiliaria"],
     showInHeader: true,
     showInDashboard: false
   },
-  { id: "casos", label: "Casos", href: "/dashboard/casos", roles: ["super_admin", "gerente_operativo", "administrativo", "contable", "lider_operativo"], showInHeader: true, showInDashboard: true },
+  { id: "casos", label: "Casos", href: "/dashboard/casos", roles: ["super_admin", "gerente_operativo", "administrativo", "contable", "lider_operativo", "cliente_inmobiliaria"], showInHeader: true, showInDashboard: true },
   {
     id: "nuevo-caso-proyecto",
     label: "Nuevo caso/proyecto",
@@ -58,6 +59,8 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
   { id: "apu", label: "APU", href: "/dashboard/apu", roles: ["super_admin", "gerente_operativo", "administrativo", "lider_operativo"], showInHeader: true, showInDashboard: true },
   { id: "almacen", label: "Almacén", href: "/dashboard/almacen", roles: ["super_admin", "gerente_operativo", "administrativo", "almacen"], showInHeader: true, showInDashboard: true },
   { id: "finanzas", label: "Finanzas", href: "/dashboard/finanzas", roles: ["super_admin", "gerente_operativo", "contable"], showInHeader: true, showInDashboard: true },
+  { id: "inmobiliarias", label: "Inmobiliarias", href: "/dashboard/inmobiliarias", roles: ["super_admin", "gerente_operativo", "administrativo"], showInHeader: true, showInDashboard: true },
+  { id: "configuracion", label: "Configuración", href: "/dashboard/configuracion", roles: ["super_admin", "gerente_operativo", "administrativo"], showInHeader: true, showInDashboard: true },
 
   // Compatibilidad / legado (fuera de navegación principal).
   {
@@ -94,7 +97,8 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
 
 export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
   { id: "inicio", label: "Inicio", href: "/dashboard", roles: ["super_admin", "gerente_operativo", "administrativo", "contable", "almacen", "lider_operativo", "tecnico"] },
-  { id: "casos", label: "Casos", href: "/dashboard/casos", roles: ["super_admin", "gerente_operativo", "administrativo", "contable", "lider_operativo"] },
+  { id: "inicio-cliente", label: "Inicio", href: "/dashboard/casos", roles: ["cliente_inmobiliaria"] },
+  { id: "casos", label: "Casos", href: "/dashboard/casos", roles: ["super_admin", "gerente_operativo", "administrativo", "contable", "lider_operativo", "cliente_inmobiliaria"] },
   {
     id: "proyectos",
     label: "Proyectos",
@@ -111,14 +115,23 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
     label: "Documentos",
     href: "/dashboard/ordenes-trabajo",
     roles: ["super_admin", "gerente_operativo", "administrativo", "lider_operativo"]
-  }
+  },
+  { id: "configuracion", label: "Configuración", href: "/dashboard/configuracion", roles: ["super_admin", "gerente_operativo", "administrativo"] }
 ];
 
 function normalizeRole(role: AppRole | null): CoreRole | null {
   const normalized = normalizeAppRole(role);
   if (!normalized) return null;
-  if (normalized === "cliente") return "tecnico";
-  if (normalized === "contable" || normalized === "almacen" || normalized === "super_admin" || normalized === "gerente_operativo" || normalized === "administrativo" || normalized === "lider_operativo" || normalized === "tecnico") {
+  if (
+    normalized === "contable" ||
+    normalized === "almacen" ||
+    normalized === "super_admin" ||
+    normalized === "gerente_operativo" ||
+    normalized === "administrativo" ||
+    normalized === "lider_operativo" ||
+    normalized === "tecnico" ||
+    normalized === "cliente_inmobiliaria"
+  ) {
     return normalized;
   }
   return null;

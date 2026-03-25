@@ -8,6 +8,10 @@ import { createClient } from "@/lib/supabase/server";
 export const APP_PERMISSIONS = [
   "ver_casos",
   "ver_casos_propios",
+  "ver_casos_cliente",
+  "ver_detalle_caso_cliente",
+  "ver_documentos_cliente",
+  "ver_evidencias_cliente",
   "crear_casos",
   "editar_casos",
   "cerrar_casos",
@@ -37,6 +41,7 @@ const ROLE_PERMISSIONS_FALLBACK: Record<AppRole, AppPermission[]> = {
   almacen: ["ver_casos", "ver_inventario", "adjuntar_soportes"],
   lider_operativo: ["ver_casos", "crear_casos", "editar_casos", "cerrar_casos", "asignar_tecnicos"],
   tecnico: ["ver_casos_propios", "adjuntar_soportes"],
+  cliente_inmobiliaria: ["ver_casos_cliente", "ver_detalle_caso_cliente", "ver_documentos_cliente", "ver_evidencias_cliente"],
 
   // Legacy mapped.
   administrador: [...APP_PERMISSIONS],
@@ -53,27 +58,29 @@ const ROLE_HIERARCHY: Record<AppRole, AppRole[]> = {
   almacen: ["super_admin", "gerente_operativo", "almacen"],
   lider_operativo: ["super_admin", "gerente_operativo", "lider_operativo"],
   tecnico: ["super_admin", "gerente_operativo", "administrativo", "lider_operativo", "tecnico"],
+  cliente_inmobiliaria: ["super_admin", "gerente_operativo", "administrativo", "cliente_inmobiliaria"],
 
   // Legacy
   administrador: ["super_admin"],
   asistente: ["super_admin", "gerente_operativo", "administrativo"],
   contabilidad: ["super_admin", "gerente_operativo", "contable"],
-  cliente: ["cliente"]
+  cliente: ["cliente_inmobiliaria"]
 };
 
-export async function getCurrentUserRole(): Promise<{ userId: string | null; role: AppRole | null }> {
+export async function getCurrentUserRole(): Promise<{ userId: string | null; role: AppRole | null; clientId: string | null }> {
   const supabase = (await createClient()) as any;
   const {
     data: { user }
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { userId: null as string | null, role: null as AppRole | null };
+    return { userId: null as string | null, role: null as AppRole | null, clientId: null };
   }
 
-  const { data } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  const { data } = await supabase.from("profiles").select("role, client_id").eq("id", user.id).maybeSingle();
   const roleFromProfile: AppRole | null =
     typeof data?.role === "string" && isValidRole(data.role) ? (data.role as AppRole) : null;
+  const clientIdFromProfile = typeof data?.client_id === "string" ? (data.client_id as string) : null;
   const metaRole =
     (typeof user.app_metadata?.role === "string" && isValidRole(user.app_metadata.role)
       ? user.app_metadata.role
@@ -86,7 +93,7 @@ export async function getCurrentUserRole(): Promise<{ userId: string | null; rol
     console.warn("[auth][permissions] authenticated user without role", { userId: user.id });
   }
 
-  return { userId: user.id as string, role };
+  return { userId: user.id as string, role, clientId: clientIdFromProfile };
 }
 
 async function getPermissionsFromDb(role: AppRole | null): Promise<AppPermission[] | null> {
@@ -116,20 +123,23 @@ export async function getCurrentUserPermissions(): Promise<{
   userId: string | null;
   role: AppRole | null;
   normalizedRole: AppRole | null;
+  clientId: string | null;
   permissions: AppPermission[];
 }> {
-  const { userId, role } = await getCurrentUserRole();
+  const { userId, role, clientId } = await getCurrentUserRole();
   const normalizedRole = normalizeRole(role);
 
   const roleForLookup = normalizedRole ?? role;
   const permissionsFromDb = await getPermissionsFromDb(roleForLookup);
   const fallback = roleForLookup ? ROLE_PERMISSIONS_FALLBACK[roleForLookup] ?? [] : [];
+  const effectivePermissions = Array.from(new Set([...(fallback ?? []), ...(permissionsFromDb ?? [])]));
 
   return {
     userId,
     role,
     normalizedRole,
-    permissions: permissionsFromDb && permissionsFromDb.length > 0 ? permissionsFromDb : fallback
+    clientId,
+    permissions: effectivePermissions
   };
 }
 

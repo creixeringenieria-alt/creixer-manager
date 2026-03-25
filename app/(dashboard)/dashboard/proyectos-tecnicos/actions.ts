@@ -146,7 +146,7 @@ export async function crearProyectoTecnicoAction(formData: FormData) {
   const type = toText(formData, "type");
   const name = toText(formData, "name");
   const startDate = toText(formData, "start_date");
-  const plannedEndDate = toText(formData, "planned_end_date");
+  const plannedEndDate = toText(formData, "estimated_end_date") ?? toText(formData, "planned_end_date");
 
   if (!clientId || !type || !name || !startDate || !plannedEndDate) {
     return fail(path, "Cliente, tipo, nombre, fecha inicio y fecha fin planeada son obligatorios.");

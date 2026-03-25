@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import CotizacionEditor from "@/components/cotizaciones/CotizacionEditor";
 import { requirePageAccess } from "@/lib/auth/permissions";
+import { normalizeRole } from "@/lib/auth/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { actualizarCotizacionAction, subirFotosCotizacionAction } from "../actions";
 
@@ -23,6 +24,7 @@ export default async function CotizacionDetailPage({ params, searchParams }: Cot
     "/dashboard",
     "Acceso denegado: tu rol no puede editar cotizaciones."
   );
+  const canAprobarInternamente = normalizeRole(role) === "super_admin";
 
   const { id } = await params;
   const query = await searchParams;
@@ -167,7 +169,7 @@ export default async function CotizacionDetailPage({ params, searchParams }: Cot
         mode="edit"
         submitLabel="Guardar cambios"
         submitAction={actualizarCotizacionAction}
-        canAprobarInternamente={role === "administrador"}
+        canAprobarInternamente={canAprobarInternamente}
         documentPath={`/dashboard/documentos/cotizaciones/${id}`}
         options={{
           clientes: (clientesResp.data ?? []).map((row) => ({ id: row.id, label: row.name })),

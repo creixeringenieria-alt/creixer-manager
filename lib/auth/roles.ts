@@ -6,7 +6,8 @@ export const CORE_APP_ROLES = [
   "contable",
   "almacen",
   "lider_operativo",
-  "tecnico"
+  "tecnico",
+  "cliente_inmobiliaria"
 ] as const;
 
 // Compatibilidad legado: se mantienen para no romper usuarios existentes.
@@ -36,6 +37,8 @@ export function normalizeRole(role: AppRole | null): AppRole | null {
       return "administrativo";
     case "contabilidad":
       return "contable";
+    case "cliente":
+      return "cliente_inmobiliaria";
     default:
       return role;
   }
@@ -50,11 +53,12 @@ export function getRoleHomePath(role: AppRole | null) {
       return "/dashboard/finanzas";
     case "tecnico":
       return "/dashboard/mis-tareas";
+    case "cliente_inmobiliaria":
+      return "/dashboard/casos";
     case "super_admin":
     case "gerente_operativo":
     case "administrativo":
     case "lider_operativo":
-    case "cliente":
     default:
       return "/dashboard";
   }

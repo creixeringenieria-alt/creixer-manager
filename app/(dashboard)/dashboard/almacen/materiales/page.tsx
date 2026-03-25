@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requirePageAccess } from "@/lib/auth/permissions";
+import { requirePagePermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import {
@@ -27,11 +27,7 @@ interface MaterialesPageProps {
 }
 
 export default async function MaterialesPage({ searchParams }: MaterialesPageProps) {
-  await requirePageAccess(
-    ["administrador", "asistente"],
-    "/dashboard",
-    "Acceso denegado: tu rol no puede acceder a materiales."
-  );
+  await requirePagePermission("ver_inventario", "/dashboard", "Acceso denegado: tu rol no puede acceder a materiales.");
 
   const params = await searchParams;
   const categoria = params.categoria ?? "";

@@ -26,8 +26,11 @@ function dateTimeValue(value: string | null | undefined) {
 
 export default async function CasoDetallePage({ params, searchParams }: CasoDetallePageProps) {
   const permissionContext = await getCurrentUserPermissions();
+  const isClientInmobiliaria = permissionContext.permissions.includes("ver_detalle_caso_cliente");
   if (permissionContext.permissions.includes("ver_casos")) {
     await requirePagePermission("ver_casos", "/dashboard", "Acceso denegado para ver el expediente.");
+  } else if (permissionContext.permissions.includes("ver_detalle_caso_cliente")) {
+    await requirePagePermission("ver_detalle_caso_cliente", "/dashboard", "Acceso denegado para ver el expediente.");
   } else {
     await requirePagePermission("ver_casos_propios", "/dashboard", "Acceso denegado: solo puedes ver casos propios.");
   }
@@ -79,8 +82,23 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
   ]);
 
   const requestId = reqResp.data?.id ?? projectResp.data?.linked_request_id ?? null;
+  const requestClientId = (reqResp.data as { clients?: { id?: string } | null } | null)?.clients?.id ?? null;
+  const projectClientId = projectResp.data?.client_id ?? null;
   const projectType = projectResp.data?.type ?? null;
   const projectIsInterventoria = projectType === "interventoria" || projectType === "consultoria";
+
+  if (permissionContext.permissions.includes("ver_detalle_caso_cliente")) {
+    const profileClientId = permissionContext.clientId;
+    const belongsToClient = !!profileClientId && (requestClientId === profileClientId || projectClientId === profileClientId);
+    if (!belongsToClient) {
+      return (
+        <main>
+          <p className="feedback error">Acceso denegado: este caso no pertenece a tu inmobiliaria.</p>
+          <Link href="/dashboard/casos">Volver a casos</Link>
+        </main>
+      );
+    }
+  }
 
   if (!permissionContext.permissions.includes("ver_casos") && permissionContext.userId) {
     const tecnicoId = permissionContext.userId;
@@ -318,9 +336,11 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
           </p>
         </div>
         <div className="inline-form">
-          <Link href="/dashboard/finanzas">Volver a finanzas</Link>
-          {requestId ? <Link href={`/dashboard/requerimientos/${requestId}/recursos`}>Recursos caso</Link> : null}
-          {projectId ? <Link href={`/dashboard/proyectos-tecnicos/${projectId}`}>Proyecto técnico</Link> : null}
+          <Link href={permissionContext.permissions.includes("ver_finanzas") ? "/dashboard/finanzas" : "/dashboard/casos"}>
+            {permissionContext.permissions.includes("ver_finanzas") ? "Volver a finanzas" : "Volver a casos"}
+          </Link>
+          {!isClientInmobiliaria && requestId ? <Link href={`/dashboard/requerimientos/${requestId}/recursos`}>Recursos caso</Link> : null}
+          {!isClientInmobiliaria && projectId ? <Link href={`/dashboard/proyectos-tecnicos/${projectId}`}>Proyecto técnico</Link> : null}
         </div>
       </div>
 
@@ -358,7 +378,7 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
           <a href="#cotizacion">Cotización</a>
           <a href="#orden">Orden de trabajo</a>
           <a href="#acta">Acta</a>
-          <a href="#financiero">Financiero</a>
+          {!isClientInmobiliaria ? <a href="#financiero">Financiero</a> : null}
           <a href="#historial">Historial</a>
         </div>
       </section>
@@ -470,8 +490,13 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
         {cotizacionActual ? (
           <p>
             Cotización: <strong>{cotizacionActual.codigo_cotizacion}</strong> | Estado: {cotizacionActual.estado} | Valor:{" "}
-            {money(cotizacionActual.total_final)} | Fecha: {dateValue(cotizacionActual.fecha_cotizacion)} |{" "}
-            <Link href={`/dashboard/cotizaciones/${cotizacionActual.id}`}>Abrir cotización</Link>
+            {money(cotizacionActual.total_final)} | Fecha: {dateValue(cotizacionActual.fecha_cotizacion)}
+            {!isClientInmobiliaria ? (
+              <>
+                {" "}
+                | <Link href={`/dashboard/cotizaciones/${cotizacionActual.id}`}>Abrir cotización</Link>
+              </>
+            ) : null}
           </p>
         ) : (
           <p>No hay cotización asociada al caso por ahora.</p>
@@ -483,7 +508,13 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
         {ordenActual ? (
           <p>
             Orden: <strong>{ordenActual.codigo_orden ?? ordenActual.id}</strong> | Estado: {ordenActual.status} | Fecha:{" "}
-            {dateValue(ordenActual.fecha_documento)} | <Link href={`/dashboard/ordenes-trabajo/${ordenActual.id}`}>Abrir orden</Link>
+            {dateValue(ordenActual.fecha_documento)}
+            {!isClientInmobiliaria ? (
+              <>
+                {" "}
+                | <Link href={`/dashboard/ordenes-trabajo/${ordenActual.id}`}>Abrir orden</Link>
+              </>
+            ) : null}
           </p>
         ) : (
           <p>No hay orden de trabajo asociada al caso.</p>
@@ -495,60 +526,73 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
         {actaActual ? (
           <p>
             Acta: <strong>{actaActual.codigo_acta ?? actaActual.id}</strong> | Satisfacción: {actaActual.satisfaccion} | Fecha:{" "}
-            {dateValue(actaActual.fecha_acta)} | <Link href={`/dashboard/actas-satisfaccion/${actaActual.id}`}>Abrir acta</Link>
+            {dateValue(actaActual.fecha_acta)}
+            {!isClientInmobiliaria ? (
+              <>
+                {" "}
+                | <Link href={`/dashboard/actas-satisfaccion/${actaActual.id}`}>Abrir acta</Link>
+              </>
+            ) : null}
           </p>
         ) : (
           <p>No hay acta de satisfacción asociada al caso.</p>
         )}
       </section>
 
-      <section className="card" id="financiero">
-        <h2>Finanzas</h2>
-        <div className="metrics-grid">
-          <article className="card metric-card">
-            <p className="metric-label">Cotizado</p>
-            <p className="metric-value">{money(financial.valor_cotizado)}</p>
-          </article>
-          <article className="card metric-card">
-            <p className="metric-label">Aprobado</p>
-            <p className="metric-value">{money(financial.valor_aprobado)}</p>
-          </article>
-          <article className="card metric-card">
-            <p className="metric-label">Facturado</p>
-            <p className="metric-value">{money(financial.valor_facturado)}</p>
-          </article>
-          <article className="card metric-card">
-            <p className="metric-label">Cobrado</p>
-            <p className="metric-value">{money(financial.valor_cobrado)}</p>
-          </article>
-          <article className="card metric-card">
-            <p className="metric-label">Saldo por facturar</p>
-            <p className="metric-value">{money(financial.saldo_por_facturar)}</p>
-          </article>
-          <article className="card metric-card">
-            <p className="metric-label">Saldo por cobrar</p>
-            <p className="metric-value">{money(financial.saldo_por_cobrar)}</p>
-          </article>
-        </div>
-        <p>
-          Anticipo solicitado: {money(financial.valor_anticipo_solicitado)} | Anticipo recibido: {money(financial.valor_anticipo_recibido)} |
-          Solicitud: {dateValue(financial.fecha_solicitud_anticipo)} | Recepción: {dateValue(financial.fecha_recepcion_anticipo)}
-        </p>
-        <p>
-          Utilidad estimada: {money(financial.utilidad_estimada)} | Utilidad real: {money(financial.utilidad_real)} | Estado financiero:{" "}
-          {financial.estado_financiero}
-        </p>
-        <p>
-          Facturas: {(invoicesResp.data ?? []).length} | Anticipos registrados: {(advancesResp.data ?? []).length} |{" "}
-          <Link href="/dashboard/finanzas">Gestionar en finanzas</Link>
-        </p>
-      </section>
+      {!isClientInmobiliaria ? (
+        <section className="card" id="financiero">
+          <h2>Finanzas</h2>
+          <div className="metrics-grid">
+            <article className="card metric-card">
+              <p className="metric-label">Cotizado</p>
+              <p className="metric-value">{money(financial.valor_cotizado)}</p>
+            </article>
+            <article className="card metric-card">
+              <p className="metric-label">Aprobado</p>
+              <p className="metric-value">{money(financial.valor_aprobado)}</p>
+            </article>
+            <article className="card metric-card">
+              <p className="metric-label">Facturado</p>
+              <p className="metric-value">{money(financial.valor_facturado)}</p>
+            </article>
+            <article className="card metric-card">
+              <p className="metric-label">Cobrado</p>
+              <p className="metric-value">{money(financial.valor_cobrado)}</p>
+            </article>
+            <article className="card metric-card">
+              <p className="metric-label">Saldo por facturar</p>
+              <p className="metric-value">{money(financial.saldo_por_facturar)}</p>
+            </article>
+            <article className="card metric-card">
+              <p className="metric-label">Saldo por cobrar</p>
+              <p className="metric-value">{money(financial.saldo_por_cobrar)}</p>
+            </article>
+          </div>
+          <p>
+            Anticipo solicitado: {money(financial.valor_anticipo_solicitado)} | Anticipo recibido: {money(financial.valor_anticipo_recibido)} |
+            Solicitud: {dateValue(financial.fecha_solicitud_anticipo)} | Recepción: {dateValue(financial.fecha_recepcion_anticipo)}
+          </p>
+          <p>
+            Utilidad estimada: {money(financial.utilidad_estimada)} | Utilidad real: {money(financial.utilidad_real)} | Estado financiero:{" "}
+            {financial.estado_financiero}
+          </p>
+          <p>
+            Facturas: {(invoicesResp.data ?? []).length} | Anticipos registrados: {(advancesResp.data ?? []).length} |{" "}
+            <Link href="/dashboard/finanzas">Gestionar en finanzas</Link>
+          </p>
+        </section>
+      ) : null}
 
       <section className="card" id="historial">
         <h2>Historial</h2>
         <p>
-          Tareas: {tareasMostradas.length} | Avance promedio: {projectTaskProgress}% | Materiales:{" "}
-          {(movementsResp.data ?? []).length} ({money(totalMateriales)}) | Herramientas pendientes: {herramientasPendientes}
+          Tareas: {tareasMostradas.length} | Avance promedio: {projectTaskProgress}%
+          {!isClientInmobiliaria ? (
+            <>
+              {" "}
+              | Materiales: {(movementsResp.data ?? []).length} ({money(totalMateriales)}) | Herramientas pendientes: {herramientasPendientes}
+            </>
+          ) : null}
         </p>
         <div className="table-wrapper">
           <table className="data-table">
@@ -576,7 +620,7 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
           </table>
         </div>
 
-        {projectIsInterventoria && projectId ? (
+        {projectIsInterventoria && projectId && !isClientInmobiliaria ? (
           <div className="inline-form" style={{ marginTop: "0.75rem" }}>
             <Link href={`/dashboard/proyectos-tecnicos/${projectId}/interventoria`}>Interventoría</Link>
             <Link href={`/dashboard/proyectos-tecnicos/${projectId}/gantt`}>Gantt</Link>

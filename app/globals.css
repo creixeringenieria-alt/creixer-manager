@@ -34,16 +34,19 @@ body {
 
 .app-logo,
 .login-logo {
-  width: 54px;
-  height: 54px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
-  border-radius: 10px;
-  border: 1px solid #dbe3f0;
-  background: #f8fafc;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  display: block;
 }
 
 .login-logo {
-  margin-bottom: 0.8rem;
+  width: 150px;
+  height: 150px;
+  margin: 0 auto 1rem;
 }
 
 .app-shell-subtitle {
@@ -56,6 +59,13 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
+}
+
+.app-shell-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
 }
 
 .app-shell-nav a {
@@ -73,6 +83,76 @@ body {
   background: #e2e8f0;
 }
 
+.user-menu {
+  position: relative;
+}
+
+.user-menu summary {
+  list-style: none;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.35rem 0.6rem;
+  background: #ffffff;
+  cursor: pointer;
+  display: grid;
+  gap: 0.1rem;
+  min-width: 170px;
+}
+
+.user-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.user-name {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 0.88rem;
+}
+
+.user-role {
+  font-size: 0.78rem;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.user-company {
+  font-size: 0.74rem;
+  color: #475569;
+}
+
+.user-menu-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  width: 210px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  padding: 0.5rem;
+  z-index: 80;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.user-menu-dropdown a,
+.user-menu-dropdown button {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+  background: #ffffff;
+  color: #0f172a;
+  text-decoration: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.user-menu-dropdown button:hover,
+.user-menu-dropdown a:hover {
+  background: #f8fafc;
+}
+
 main {
   max-width: 1160px;
   margin: 0 auto;
@@ -87,13 +167,16 @@ main {
 }
 
 .login-card {
-  width: min(480px, 100%);
+  width: min(560px, 100%);
   text-align: center;
+  padding: 2rem 1.5rem;
+  box-shadow: 0 14px 42px rgba(15, 23, 42, 0.08);
 }
 
 .login-subtitle {
-  margin-top: -0.2rem;
+  margin-top: -0.15rem;
   color: #475569;
+  margin-bottom: 1rem;
 }
 
 .card {
@@ -140,6 +223,30 @@ main {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.7rem;
+}
+
+.form-field {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.form-field > label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.form-field-label {
+  display: block !important;
+  margin-bottom: 6px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #374151 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 .form-grid input,

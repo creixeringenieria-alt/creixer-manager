@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requirePageAccess } from "@/lib/auth/permissions";
+import { requirePagePermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 interface AgendaTiempoRealPageProps {
@@ -12,19 +12,32 @@ function dateOnly(value: Date) {
 }
 
 export default async function AgendaTiempoRealPage({ searchParams }: AgendaTiempoRealPageProps) {
-  await requirePageAccess(
-    ["administrador", "asistente"],
+  await requirePagePermission(
+    "ver_casos",
     "/dashboard",
     "Acceso denegado: tu rol no puede acceder a la agenda en tiempo real."
   );
 
+  const route = "/dashboard/agenda-operativa/tiempo-real";
   const params = await searchParams;
   const periodo = params.periodo ?? "hoy";
   const responsable = params.responsable ?? "";
   const tipoProyecto = params.tipo_proyecto ?? "";
   const estado = params.estado ?? "";
 
-  const supabase = createAdminClient();
+  let hasQueryFailure = false;
+  let supabase: ReturnType<typeof createAdminClient> | null = null;
+  try {
+    supabase = createAdminClient();
+  } catch (error) {
+    hasQueryFailure = true;
+    console.error("[dashboard/agenda-operativa/tiempo-real] createAdminClient failed", {
+      route,
+      query: "createAdminClient",
+      variable: "NEXT_PUBLIC_SUPABASE_URL | SUPABASE_SERVICE_ROLE_KEY",
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
   const today = new Date();
   const todayStr = dateOnly(today);
   const weekEnd = new Date();
@@ -32,54 +45,108 @@ export default async function AgendaTiempoRealPage({ searchParams }: AgendaTiemp
   const weekEndStr = dateOnly(weekEnd);
 
   let agendaQuery = supabase
-    .from("agenda_operativa")
-    .select(
-      "id, fecha_programada, franja_horaria, tipo_visita, direccion, observaciones_logisticas, estado_agenda, tecnico_id, requerimientos(codigo_requerimiento, clients(name)), profiles(full_name)"
-    )
-    .order("fecha_programada", { ascending: true })
-    .order("franja_horaria", { ascending: true });
+    ? supabase
+        .from("agenda_operativa")
+        .select(
+          "id, fecha_programada, franja_horaria, tipo_visita, direccion, observaciones_logisticas, estado_agenda, tecnico_id, requerimientos(codigo_requerimiento, clients(name)), profiles(full_name)"
+        )
+        .order("fecha_programada", { ascending: true })
+        .order("franja_horaria", { ascending: true })
+    : null;
 
   if (periodo === "hoy") {
-    agendaQuery = agendaQuery.eq("fecha_programada", todayStr);
+    agendaQuery = agendaQuery?.eq("fecha_programada", todayStr) ?? null;
   } else {
-    agendaQuery = agendaQuery.gte("fecha_programada", todayStr).lte("fecha_programada", weekEndStr);
+    agendaQuery = agendaQuery?.gte("fecha_programada", todayStr).lte("fecha_programada", weekEndStr) ?? null;
   }
   if (responsable) {
-    agendaQuery = agendaQuery.eq("tecnico_id", responsable);
+    agendaQuery = agendaQuery?.eq("tecnico_id", responsable) ?? null;
   }
   if (estado) {
-    agendaQuery = agendaQuery.eq("estado_agenda", estado);
+    agendaQuery = agendaQuery?.eq("estado_agenda", estado) ?? null;
   }
 
   let projectTasksQuery = supabase
-    .from("technical_project_tasks")
-    .select(
-      "id, name, task_type, status, start_date, scheduled_time, planned_end_date, notes, responsible_user_id, technical_projects(name, type, location, clients(name)), profiles(full_name)"
-    )
-    .order("start_date", { ascending: true });
+    ? supabase
+        .from("technical_project_tasks")
+        .select(
+          "id, name, task_type, status, start_date, scheduled_time, planned_end_date, notes, responsible_user_id, technical_projects(name, type, location, clients(name)), profiles(full_name)"
+        )
+        .order("start_date", { ascending: true })
+    : null;
 
   if (periodo === "hoy") {
-    projectTasksQuery = projectTasksQuery.eq("start_date", todayStr);
+    projectTasksQuery = projectTasksQuery?.eq("start_date", todayStr) ?? null;
   } else {
-    projectTasksQuery = projectTasksQuery.gte("start_date", todayStr).lte("start_date", weekEndStr);
+    projectTasksQuery = projectTasksQuery?.gte("start_date", todayStr).lte("start_date", weekEndStr) ?? null;
   }
   if (responsable) {
-    projectTasksQuery = projectTasksQuery.eq("responsible_user_id", responsable);
+    projectTasksQuery = projectTasksQuery?.eq("responsible_user_id", responsable) ?? null;
   }
   if (estado) {
-    projectTasksQuery = projectTasksQuery.eq("status", estado);
+    projectTasksQuery = projectTasksQuery?.eq("status", estado) ?? null;
   }
   if (tipoProyecto) {
-    projectTasksQuery = projectTasksQuery.eq("technical_projects.type", tipoProyecto);
+    projectTasksQuery = projectTasksQuery?.eq("technical_projects.type", tipoProyecto) ?? null;
   }
 
-  const [agendaResp, projectTasksResp, usersResp] = await Promise.all([
-    agendaQuery,
-    projectTasksQuery,
-    supabase.from("profiles").select("id, full_name, role").order("full_name")
+  type QueryResponse<T> = { data: T[] | null; error: { message: string } | null };
+  async function runQuery<T>({
+    queryName,
+    variable,
+    execute
+  }: {
+    queryName: string;
+    variable: string;
+    execute: (() => PromiseLike<QueryResponse<T>>) | null;
+  }): Promise<T[]> {
+    if (!execute) {
+      return [];
+    }
+    try {
+      const response = await execute();
+      if (response.error) {
+        hasQueryFailure = true;
+        console.error("[dashboard/agenda-operativa/tiempo-real] query failed", {
+          route,
+          query: queryName,
+          variable,
+          error: response.error.message
+        });
+        return [];
+      }
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      hasQueryFailure = true;
+      console.error("[dashboard/agenda-operativa/tiempo-real] query threw exception", {
+        route,
+        query: queryName,
+        variable,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return [];
+    }
+  }
+
+  const [agendaRows, projectTaskRows, users] = await Promise.all([
+    runQuery({
+      queryName: "agenda_operativa.filtered",
+      variable: "agenda_operativa",
+      execute: agendaQuery ? () => agendaQuery : null
+    }),
+    runQuery({
+      queryName: "technical_project_tasks.filtered",
+      variable: "technical_project_tasks",
+      execute: projectTasksQuery ? () => projectTasksQuery : null
+    }),
+    runQuery({
+      queryName: "profiles.list",
+      variable: "profiles",
+      execute: supabase ? () => supabase.from("profiles").select("id, full_name, role").order("full_name") : null
+    })
   ]);
 
-  const rowsAgenda = (agendaResp.data ?? []).map((item) => ({
+  const rowsAgenda = agendaRows.map((item) => ({
     id: `agenda-${item.id}`,
     fecha: item.fecha_programada,
     hora: item.franja_horaria,
@@ -93,7 +160,7 @@ export default async function AgendaTiempoRealPage({ searchParams }: AgendaTiemp
     tipoProyecto: "mantenimiento"
   }));
 
-  const rowsProyecto = (projectTasksResp.data ?? []).map((task) => ({
+  const rowsProyecto = projectTaskRows.map((task) => ({
     id: `proyecto-${task.id}`,
     fecha: task.start_date ?? "-",
     hora: task.scheduled_time ?? "-",
@@ -132,7 +199,7 @@ export default async function AgendaTiempoRealPage({ searchParams }: AgendaTiemp
           </select>
           <select name="responsable" defaultValue={responsable}>
             <option value="">Todos los responsables</option>
-            {usersResp.data?.map((user) => (
+            {users.map((user) => (
               <option key={user.id} value={user.id}>
                 {user.full_name ?? user.id}
               </option>
@@ -164,6 +231,7 @@ export default async function AgendaTiempoRealPage({ searchParams }: AgendaTiemp
 
       <section className="card">
         <h2>Programación en tiempo real</h2>
+        {hasQueryFailure ? <p className="feedback error">No fue posible cargar agenda operativa</p> : null}
         <div className="table-wrapper">
           <table className="data-table">
             <thead>

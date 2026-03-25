@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loginWithPasswordAction } from "./actions";
 
 interface LoginPageProps {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; ok?: string }>;
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
@@ -32,6 +32,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <p className="login-subtitle">Plataforma operativa y gerencial de Creixer Ingeniería</p>
 
         {params.error ? <p className="feedback error">{params.error}</p> : null}
+        {params.ok ? <p className="feedback success">{params.ok}</p> : null}
 
         <form action={loginWithPasswordAction} className="form-grid">
           <input type="email" name="email" placeholder="Correo" required />

@@ -9,8 +9,12 @@ interface CasosPageProps {
 
 export default async function CasosPage({ searchParams }: CasosPageProps) {
   const permissionContext = await getCurrentUserPermissions();
+  const isClientInmobiliaria = permissionContext.permissions.includes("ver_casos_cliente");
+  const missingClientAssociation = isClientInmobiliaria && !permissionContext.clientId;
   if (permissionContext.permissions.includes("ver_casos")) {
     await requirePagePermission("ver_casos", "/dashboard", "Acceso denegado: tu rol no puede ver casos.");
+  } else if (permissionContext.permissions.includes("ver_casos_cliente")) {
+    await requirePagePermission("ver_casos_cliente", "/dashboard", "Acceso denegado: tu rol no puede ver casos de inmobiliaria.");
   } else {
     await requirePagePermission("ver_casos_propios", "/dashboard", "Acceso denegado: solo puedes ver casos propios.");
   }
@@ -21,7 +25,7 @@ export default async function CasosPage({ searchParams }: CasosPageProps) {
   let query = supabase
     .from("financial_records")
     .select(
-      "id, case_type, estado_financiero, valor_aprobado, valor_facturado, valor_cobrado, saldo_por_cobrar, requerimiento_id, technical_project_id, requerimientos(codigo_requerimiento), technical_projects(name)"
+      "id, case_type, estado_financiero, valor_aprobado, valor_facturado, valor_cobrado, saldo_por_cobrar, requerimiento_id, technical_project_id, requerimientos(cliente_id, codigo_requerimiento), technical_projects(client_id, name)"
     )
     .order("updated_at", { ascending: false })
     .limit(300);
@@ -36,7 +40,18 @@ export default async function CasosPage({ searchParams }: CasosPageProps) {
   const casesResp = await query;
   let rows = casesResp.data ?? [];
 
-  if (!permissionContext.permissions.includes("ver_casos") && permissionContext.userId) {
+  if (permissionContext.permissions.includes("ver_casos_cliente")) {
+    const clientId = permissionContext.clientId;
+    if (!clientId) {
+      rows = [];
+    } else {
+      rows = rows.filter((row) => {
+        const reqClientId = (row.requerimientos as { cliente_id?: string } | null)?.cliente_id ?? null;
+        const projectClientId = (row.technical_projects as { client_id?: string } | null)?.client_id ?? null;
+        return reqClientId === clientId || projectClientId === clientId;
+      });
+    }
+  } else if (!permissionContext.permissions.includes("ver_casos") && permissionContext.userId) {
     const tecnicoId = permissionContext.userId;
     const [agendasPropiasResp, tareasProyectoResp] = await Promise.all([
       supabase.from("agenda_operativa").select("requerimiento_id").eq("tecnico_id", tecnicoId),
@@ -90,17 +105,20 @@ export default async function CasosPage({ searchParams }: CasosPageProps) {
 
       <section className="card">
         <h2>Listado</h2>
+        {missingClientAssociation ? (
+          <p className="feedback error">Tu usuario no tiene inmobiliaria asociada. Contacta al administrador.</p>
+        ) : null}
         <div className="table-wrapper">
           <table className="data-table">
             <thead>
               <tr>
                 <th>Caso/Proyecto</th>
                 <th>Tipo</th>
-                <th>Estado financiero</th>
-                <th>Aprobado</th>
-                <th>Facturado</th>
-                <th>Cobrado</th>
-                <th>Saldo cobrar</th>
+                {!isClientInmobiliaria ? <th>Estado financiero</th> : null}
+                {!isClientInmobiliaria ? <th>Aprobado</th> : null}
+                {!isClientInmobiliaria ? <th>Facturado</th> : null}
+                {!isClientInmobiliaria ? <th>Cobrado</th> : null}
+                {!isClientInmobiliaria ? <th>Saldo cobrar</th> : null}
                 <th>Acción</th>
               </tr>
             </thead>
@@ -113,11 +131,11 @@ export default async function CasosPage({ searchParams }: CasosPageProps) {
                       "-"}
                   </td>
                   <td>{row.case_type}</td>
-                  <td>{row.estado_financiero}</td>
-                  <td>{Number(row.valor_aprobado).toLocaleString("es-CO")}</td>
-                  <td>{Number(row.valor_facturado).toLocaleString("es-CO")}</td>
-                  <td>{Number(row.valor_cobrado).toLocaleString("es-CO")}</td>
-                  <td>{Number(row.saldo_por_cobrar).toLocaleString("es-CO")}</td>
+                  {!isClientInmobiliaria ? <td>{row.estado_financiero}</td> : null}
+                  {!isClientInmobiliaria ? <td>{Number(row.valor_aprobado).toLocaleString("es-CO")}</td> : null}
+                  {!isClientInmobiliaria ? <td>{Number(row.valor_facturado).toLocaleString("es-CO")}</td> : null}
+                  {!isClientInmobiliaria ? <td>{Number(row.valor_cobrado).toLocaleString("es-CO")}</td> : null}
+                  {!isClientInmobiliaria ? <td>{Number(row.saldo_por_cobrar).toLocaleString("es-CO")}</td> : null}
                   <td>
                     <Link href={`/dashboard/casos/${row.id}`}>Abrir vista única</Link>
                   </td>

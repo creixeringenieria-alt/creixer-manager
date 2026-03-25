@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { isValidRole } from "@/lib/auth/roles";
+import { isValidRole, type AppRole } from "@/lib/auth/roles";
 
 function textValue(formData: FormData, key: string, required = false) {
   const value = formData.get(key);
@@ -52,7 +52,7 @@ export async function updateOwnBasicProfileAction(formData: FormData) {
   const availableColumns = await getProfilesAvailableColumns(admin);
   const { data: currentProfile } = await admin
     .from("profiles")
-    .select("role, basic_data_locked")
+    .select("role, user_type, organization_name, client_id, basic_data_locked")
     .eq("id", user.id)
     .maybeSingle();
   const currentRole = typeof currentProfile?.role === "string" && isValidRole(currentProfile.role) ? currentProfile.role : null;
@@ -63,7 +63,21 @@ export async function updateOwnBasicProfileAction(formData: FormData) {
     redirect(`${redirectTo}?error=${encodeURIComponent("Tus datos básicos están bloqueados. Solo super_admin puede editarlos.")}`);
   }
 
-  const rawUpdates = {
+  const metadataRole =
+    (typeof user.app_metadata?.role === "string" && isValidRole(user.app_metadata.role)
+      ? (user.app_metadata.role as AppRole)
+      : null) ??
+    (typeof user.user_metadata?.role === "string" && isValidRole(user.user_metadata.role)
+      ? (user.user_metadata.role as AppRole)
+      : null);
+  const effectiveRole: AppRole = currentRole ?? metadataRole ?? "administrativo";
+
+  const rawUpdates: Record<string, unknown> = {
+    id: user.id,
+    role: effectiveRole,
+    user_type: currentProfile?.user_type ?? "colaborador_creixer",
+    organization_name: currentProfile?.organization_name ?? "Creixer Ingeniería S.A.S.",
+    client_id: currentProfile?.client_id ?? null,
     full_name: textValue(formData, "full_name"),
     phone: textValue(formData, "phone"),
     document_type: textValue(formData, "document_type"),
@@ -73,7 +87,7 @@ export async function updateOwnBasicProfileAction(formData: FormData) {
   };
   const updates = Object.fromEntries(Object.entries(rawUpdates).filter(([key]) => availableColumns.has(key)));
 
-  const { error } = await admin.from("profiles").update(updates).eq("id", user.id);
+  const { error } = await admin.from("profiles").upsert(updates, { onConflict: "id" });
   if (error) {
     if (String(error.message ?? "").includes("document_number")) {
       redirect(

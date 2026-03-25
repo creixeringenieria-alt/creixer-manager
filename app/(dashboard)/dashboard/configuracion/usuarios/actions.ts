@@ -29,6 +29,14 @@ async function getProfilesAvailableColumns(admin: any): Promise<Set<string>> {
   return new Set((data as Array<{ column_name: string }>).map((row) => row.column_name));
 }
 
+function filterUpdatesByAvailableColumns(raw: Record<string, unknown>, availableColumns: Set<string>) {
+  // Si no se pudo leer information_schema en este entorno, no filtrar.
+  if (availableColumns.size === 0) {
+    return raw;
+  }
+  return Object.fromEntries(Object.entries(raw).filter(([key]) => key === "id" || availableColumns.has(key)));
+}
+
 export async function adminUpdateUserBasicDataAction(formData: FormData) {
   const { userId, normalizedRole } = await getCurrentUserPermissions();
   if (!userId) {
@@ -85,7 +93,7 @@ export async function adminUpdateUserBasicDataAction(formData: FormData) {
 
   const supabase = createAdminClient() as any;
   const availableColumns = await getProfilesAvailableColumns(supabase);
-  const updates = Object.fromEntries(Object.entries(rawUpdates).filter(([key]) => availableColumns.has(key)));
+  const updates = filterUpdatesByAvailableColumns(rawUpdates, availableColumns);
   const { error } = await supabase.from("profiles").update(updates).eq("id", profileId);
   if (error) {
     redirect(`/dashboard/configuracion/usuarios?error=${encodeURIComponent(`No se pudo actualizar usuario: ${error.message}`)}`);

@@ -37,6 +37,14 @@ async function getProfilesAvailableColumns(admin: any): Promise<Set<string>> {
   return new Set((data as Array<{ column_name: string }>).map((row) => row.column_name));
 }
 
+function filterUpdatesByAvailableColumns(raw: Record<string, unknown>, availableColumns: Set<string>) {
+  // Si no se pudo leer information_schema en este entorno, no filtrar.
+  if (availableColumns.size === 0) {
+    return raw;
+  }
+  return Object.fromEntries(Object.entries(raw).filter(([key]) => key === "id" || availableColumns.has(key)));
+}
+
 export async function updateOwnBasicProfileAction(formData: FormData) {
   const redirectTo = sanitizeRedirect(formData.get("redirect_to"));
   const supabase = (await createClient()) as any;
@@ -85,7 +93,7 @@ export async function updateOwnBasicProfileAction(formData: FormData) {
     basic_data_locked: true,
     basic_data_locked_at: new Date().toISOString()
   };
-  const updates = Object.fromEntries(Object.entries(rawUpdates).filter(([key]) => availableColumns.has(key)));
+  const updates = filterUpdatesByAvailableColumns(rawUpdates, availableColumns);
 
   const { error } = await admin.from("profiles").upsert(updates, { onConflict: "id" });
   if (error) {

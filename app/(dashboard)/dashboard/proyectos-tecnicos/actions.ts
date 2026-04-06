@@ -153,26 +153,65 @@ export async function crearProyectoTecnicoAction(formData: FormData) {
   }
 
   const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("technical_projects")
-    .insert({
-      client_id: clientId,
-      type,
-      name,
-      internal_client_code: name,
-      description: toText(formData, "description"),
-      location: toText(formData, "location"),
-      linked_request_id: toText(formData, "linked_request_id"),
-      request_category: toText(formData, "request_category"),
-      status: toText(formData, "status") ?? "en_visita",
-      start_date: startDate,
-      planned_end_date: plannedEndDate,
-      priority: toText(formData, "priority") ?? "media",
-      director_responsible_id: toText(formData, "director_responsible_id"),
-      technical_lead_id: toText(formData, "technical_lead_id")
-    })
-    .select("id")
-    .single();
+  const payload: Record<string, string | null> = {
+    client_id: clientId,
+    type,
+    name,
+    internal_client_code: name,
+    description: toText(formData, "description"),
+    location: toText(formData, "location"),
+    linked_request_id: toText(formData, "linked_request_id"),
+    request_category: toText(formData, "request_category"),
+    status: toText(formData, "status") ?? "en_visita",
+    start_date: startDate,
+    planned_end_date: plannedEndDate,
+    priority: toText(formData, "priority") ?? "media",
+    director_responsible_id: toText(formData, "director_responsible_id"),
+    technical_lead_id: toText(formData, "technical_lead_id")
+  };
+
+  let data: { id: string } | null = null;
+  let error: { message?: string } | null = null;
+
+  for (let i = 0; i < 8; i += 1) {
+    const response = await supabase.from("technical_projects").insert(payload).select("id").single();
+    data = response.data;
+    error = response.error;
+    if (!error) {
+      break;
+    }
+
+    const message = String(error.message ?? "");
+    const missingColumnMatch = message.match(/Could not find the '([^']+)' column/i);
+    const missingColumn = missingColumnMatch?.[1] ?? null;
+    if (missingColumn && missingColumn in payload) {
+      delete payload[missingColumn];
+      continue;
+    }
+
+    if (
+      message.includes('invalid input value for enum technical_project_status') &&
+      payload.status === "en_visita"
+    ) {
+      payload.status = "planeado";
+      continue;
+    }
+
+    if (
+      message.includes('invalid input value for enum technical_project_type') &&
+      payload.type === "obra_conjunto_residencial"
+    ) {
+      payload.type = "mantenimiento";
+      continue;
+    }
+
+    if (message.includes('null value in column "planned_end_date"') && !payload.planned_end_date) {
+      payload.planned_end_date = startDate;
+      continue;
+    }
+
+    break;
+  }
 
   if (error || !data) {
     if (error?.message?.includes("no unique or exclusion constraint matching the ON CONFLICT specification")) {

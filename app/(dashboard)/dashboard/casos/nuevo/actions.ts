@@ -43,12 +43,21 @@ export async function crearCasoAction(formData: FormData) {
   const flowType = normalizeFlowType(textValue(formData, "flow_type"));
   const serviceArea = normalizeServiceArea(textValue(formData, "service_area"));
   const internalClientCode = textValue(formData, "internal_client_code");
+  const externalPropertyCode = textValue(formData, "external_property_code");
+  const externalCaseId = textValue(formData, "external_case_id");
+  const externalCaseCode = textValue(formData, "external_case_code");
   const description = textValue(formData, "description");
   const priority = textValue(formData, "priority") ?? "media";
   const estimatedDeliveryDate = textValue(formData, "estimated_delivery_date");
+  const billToAssignedClient = (textValue(formData, "bill_to_assigned_client") ?? "si") === "si";
+  const billingClientIdInput = textValue(formData, "billing_client_id");
+  const billingObservations = textValue(formData, "billing_observations");
 
   if (!clientId || !flowType || !serviceArea) {
     return fail("Cliente, tipo de proyecto y especialidad son obligatorios.");
+  }
+  if (!billToAssignedClient && !billingClientIdInput) {
+    return fail("Si no se factura a la inmobiliaria asignada, debes seleccionar a quién se factura.");
   }
 
   const supabase = createAdminClient() as any;
@@ -66,9 +75,15 @@ export async function crearCasoAction(formData: FormData) {
     flow_type: flowType,
     service_area: serviceArea,
     internal_client_code: internalClientCode,
+    external_property_code: externalPropertyCode,
+    external_case_id: externalCaseId,
+    external_case_code: externalCaseCode,
     start_with_visit: true,
     current_stage: "en_visita",
     estimated_delivery_date: estimatedDeliveryDate,
+    bill_to_assigned_client: billToAssignedClient,
+    billing_client_id: billToAssignedClient ? clientId : billingClientIdInput,
+    billing_observations: billingObservations,
     created_by: user?.id ?? null
   };
 

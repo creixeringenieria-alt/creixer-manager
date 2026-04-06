@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { crearCasoAction } from "./actions";
 
 interface NuevoCasoPageProps {
-  searchParams: Promise<{ ok?: string; error?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; q?: string }>;
 }
 
 interface ClientRow {
@@ -19,6 +19,12 @@ interface CaseRow {
   case_code?: string | null;
   flow_type?: string | null;
   service_area?: string | null;
+  internal_client_code?: string | null;
+  external_property_code?: string | null;
+  external_case_id?: string | null;
+  external_case_code?: string | null;
+  bill_to_assigned_client?: boolean | null;
+  billing_client_id?: string | null;
   status?: string | null;
   created_at: string;
   clients?: { name?: string } | { name?: string }[] | null;
@@ -29,14 +35,25 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
 
   const params = await searchParams;
   const supabase = createAdminClient() as any;
+  const queryText = (params.q ?? "").trim();
+
+  let recentCasesQuery = supabase
+    .from("cases")
+    .select(
+      "id, case_code, flow_type, service_area, internal_client_code, external_property_code, external_case_id, external_case_code, bill_to_assigned_client, billing_client_id, status, created_at, clients(name)"
+    )
+    .order("created_at", { ascending: false })
+    .limit(30);
+
+  if (queryText) {
+    recentCasesQuery = recentCasesQuery.or(
+      `case_code.ilike.%${queryText}%,internal_client_code.ilike.%${queryText}%,external_property_code.ilike.%${queryText}%,external_case_id.ilike.%${queryText}%,external_case_code.ilike.%${queryText}%`
+    );
+  }
 
   const [clientsResp, recentCasesResp] = await Promise.all([
     supabase.from("clients").select("id, name").eq("is_active", true).order("name"),
-    supabase
-      .from("cases")
-      .select("id, case_code, flow_type, service_area, status, created_at, clients(name)")
-      .order("created_at", { ascending: false })
-      .limit(10)
+    recentCasesQuery
   ]);
 
   const clients = ((clientsResp.data ?? []) as ClientRow[]) || [];
@@ -89,6 +106,21 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
           </div>
 
           <div className="form-field">
+            <label htmlFor="case-external-property-code">N° Inmueble / ID / Código del cliente</label>
+            <input id="case-external-property-code" name="external_property_code" placeholder="Referencia tal como la maneja la inmobiliaria" />
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="case-external-id">ID externo del caso (opcional)</label>
+            <input id="case-external-id" name="external_case_id" placeholder="ID interno del cliente" />
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="case-external-code">Código externo del caso (opcional)</label>
+            <input id="case-external-code" name="external_case_code" placeholder="Código de ticket/solicitud del cliente" />
+          </div>
+
+          <div className="form-field">
             <label htmlFor="case-service-area">Caso / Requerimiento</label>
             <select id="case-service-area" name="service_area" required defaultValue="mantenimiento_general">
               <option value="hidraulico">hidraulico</option>
@@ -120,6 +152,31 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
             <input id="case-estimated-delivery" name="estimated_delivery_date" type="date" />
           </div>
 
+          <div className="form-field">
+            <label htmlFor="case-bill-to-assigned">¿Se factura a esta inmobiliaria?</label>
+            <select id="case-bill-to-assigned" name="bill_to_assigned_client" defaultValue="si">
+              <option value="si">Sí, se factura a la inmobiliaria asignada</option>
+              <option value="no">No, se factura a otro cliente/tercero</option>
+            </select>
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="case-billing-client-id">Cliente a facturar (si es diferente)</label>
+            <select id="case-billing-client-id" name="billing_client_id" defaultValue="">
+              <option value="">Sin cambio (usar inmobiliaria asignada)</option>
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-field" style={{ gridColumn: "1 / -1" }}>
+            <label htmlFor="case-billing-observations">Observación de facturación</label>
+            <textarea id="case-billing-observations" name="billing_observations" placeholder="Ej: se factura al propietario final" />
+          </div>
+
           <div className="form-field" style={{ gridColumn: "1 / -1" }}>
             <label htmlFor="case-description">Descripción del caso</label>
             <textarea id="case-description" name="description" placeholder="Detalle operativo del caso" />
@@ -136,14 +193,24 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
 
       <section className="card">
         <h2>Últimos casos creados</h2>
+        <form method="GET" className="inline-form" style={{ marginBottom: "0.75rem" }}>
+          <input
+            name="q"
+            defaultValue={queryText}
+            placeholder="Buscar por consecutivo, código interno, N° Inm, ID o código externo"
+          />
+          <button type="submit">Buscar</button>
+        </form>
         <div className="table-wrapper">
           <table className="data-table">
             <thead>
               <tr>
                 <th>Consecutivo</th>
                 <th>Cliente</th>
+                <th>Ref. cliente</th>
                 <th>Tipo</th>
                 <th>Especialidad</th>
+                <th>Facturación</th>
                 <th>Estado</th>
                 <th>Fecha</th>
               </tr>
@@ -155,8 +222,10 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
                   <tr key={row.id}>
                     <td>{row.case_code ?? `CASO-${row.id.slice(0, 8).toUpperCase()}`}</td>
                     <td>{clientRow?.name ?? "-"}</td>
+                    <td>{[row.internal_client_code, row.external_property_code, row.external_case_id, row.external_case_code].filter(Boolean).join(" | ") || "-"}</td>
                     <td>{row.flow_type ?? "-"}</td>
                     <td>{row.service_area ?? "-"}</td>
+                    <td>{row.bill_to_assigned_client === false ? "Tercero" : "Inmobiliaria"}</td>
                     <td>{row.status ?? "-"}</td>
                     <td>{new Date(row.created_at).toLocaleDateString("es-CO")}</td>
                   </tr>
@@ -164,7 +233,7 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
               })}
               {recentCases.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>Aún no hay casos creados.</td>
+                  <td colSpan={8}>Aún no hay casos creados.</td>
                 </tr>
               ) : null}
             </tbody>

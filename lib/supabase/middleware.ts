@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { isComplementaryProfileComplete } from "@/lib/auth/profile-completion";
 import { getRoleHomePath, isValidRole } from "@/lib/auth/roles";
+import type { AppRole } from "@/lib/auth/roles";
 import type { Database } from "@/types/database";
 
 export async function updateSession(request: NextRequest) {
@@ -11,12 +12,17 @@ export async function updateSession(request: NextRequest) {
   const isLoginRoute = pathname === "/login";
   const isAccessIncompleteRoute = pathname === "/acceso-incompleto";
   const isProfileCompleteRoute = pathname === "/dashboard/perfil/completar";
+  const requiresAuthHandling = isDashboardRoute || isLoginRoute || isAccessIncompleteRoute;
 
   let response = NextResponse.next({
     request: {
       headers: request.headers
     }
   });
+
+  if (!requiresAuthHandling) {
+    return response;
+  }
   try {
     const supabase = createServerClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -65,20 +71,7 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    if (user && (isLoginRoute || isDashboardRoute || isAccessIncompleteRoute)) {
-      const { data: profile, error: profileError } = (await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle()) as {
-        data: { role?: string } | null;
-        error?: { message?: string } | null;
-      };
-
-      if (profileError) {
-        console.error("[auth][middleware] profile role lookup failed:", profileError.message);
-      }
-
+    if (user && requiresAuthHandling) {
       const metadataRole =
         (typeof user.app_metadata?.role === "string" && isValidRole(user.app_metadata.role)
           ? user.app_metadata.role
@@ -86,7 +79,28 @@ export async function updateSession(request: NextRequest) {
         (typeof user.user_metadata?.role === "string" && isValidRole(user.user_metadata.role)
           ? user.user_metadata.role
           : null);
-      const roleFromProfile = typeof profile?.role === "string" && isValidRole(profile.role) ? profile.role : null;
+
+      let roleFromProfile: AppRole | null = null;
+      if (!metadataRole || isAccessIncompleteRoute) {
+        try {
+          const { data: profile, error: profileError } = (await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", user.id)
+            .maybeSingle()) as {
+            data: { role?: string } | null;
+            error?: { message?: string } | null;
+          };
+          if (profileError) {
+            console.error("[auth][middleware] profile role lookup failed:", profileError.message);
+          } else {
+            roleFromProfile = typeof profile?.role === "string" && isValidRole(profile.role) ? (profile.role as AppRole) : null;
+          }
+        } catch (profileLookupError) {
+          console.error("[auth][middleware] profile role lookup exception:", profileLookupError);
+        }
+      }
+
       const role = roleFromProfile ?? metadataRole;
 
       let isProfileComplete = false;
@@ -94,21 +108,25 @@ export async function updateSession(request: NextRequest) {
         isProfileComplete = true;
       } else {
         try {
-          const { data: complementaryData, error: complementaryError } = await supabase
-            .from("profile_complementary_data")
-            .select(
-              "fecha_nacimiento, grupo_sanguineo_rh, eps, arl, fondo_pension, fondo_cesantias, direccion_residencia, ciudad_residencia, contacto_emergencia_nombre, contacto_emergencia_telefono, parentesco_contacto_emergencia, observaciones_medicas_relevantes"
-            )
-            .eq("id", user.id)
-            .maybeSingle();
-          if (complementaryError) {
-            console.error("[auth][middleware] complementary profile lookup failed:", complementaryError.message);
-          }
           const metadataComplementary =
             typeof user.user_metadata?.complementary_profile === "object" && user.user_metadata?.complementary_profile
               ? user.user_metadata.complementary_profile
               : null;
-          isProfileComplete = isComplementaryProfileComplete(complementaryData ?? metadataComplementary);
+          if (isComplementaryProfileComplete(metadataComplementary)) {
+            isProfileComplete = true;
+          } else {
+            const { data: complementaryData, error: complementaryError } = await supabase
+              .from("profile_complementary_data")
+              .select(
+                "fecha_nacimiento, grupo_sanguineo_rh, eps, arl, fondo_pension, fondo_cesantias, direccion_residencia, ciudad_residencia, contacto_emergencia_nombre, contacto_emergencia_telefono, parentesco_contacto_emergencia, observaciones_medicas_relevantes"
+              )
+              .eq("id", user.id)
+              .maybeSingle();
+            if (complementaryError) {
+              console.error("[auth][middleware] complementary profile lookup failed:", complementaryError.message);
+            }
+            isProfileComplete = isComplementaryProfileComplete(complementaryData ?? metadataComplementary);
+          }
         } catch (error) {
           console.error("[auth][middleware] complementary profile lookup unexpected error:", error);
           const metadataComplementary =

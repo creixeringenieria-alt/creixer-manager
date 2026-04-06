@@ -21,16 +21,51 @@ export const APP_ROLES = [
 
 export type AppRole = (typeof APP_ROLES)[number];
 
-export function isValidRole(role: string): role is AppRole {
-  return APP_ROLES.includes(role as AppRole);
-}
-
-export function normalizeRole(role: AppRole | null): AppRole | null {
+function canonicalizeRole(role: string | null | undefined): AppRole | null {
   if (!role) {
     return null;
   }
 
-  switch (role) {
+  const raw = role.trim();
+  if (!raw) {
+    return null;
+  }
+
+  if (APP_ROLES.includes(raw as AppRole)) {
+    return raw as AppRole;
+  }
+
+  const normalized = raw.toLowerCase().replace(/[\s-]+/g, "_");
+  const aliases: Record<string, AppRole> = {
+    superadmin: "super_admin",
+    super_admin: "super_admin",
+    administrador: "administrador",
+    gerente_operativo: "gerente_operativo",
+    administrativo: "administrativo",
+    contable: "contable",
+    contabilidad: "contabilidad",
+    almacen: "almacen",
+    lider_operativo: "lider_operativo",
+    tecnico: "tecnico",
+    asistente: "asistente",
+    cliente: "cliente",
+    cliente_inmobiliaria: "cliente_inmobiliaria"
+  };
+
+  return aliases[normalized] ?? null;
+}
+
+export function isValidRole(role: string): role is AppRole {
+  return canonicalizeRole(role) !== null;
+}
+
+export function normalizeRole(role: AppRole | string | null): AppRole | null {
+  const canonical = typeof role === "string" ? canonicalizeRole(role) : role;
+  if (!canonical) {
+    return null;
+  }
+
+  switch (canonical) {
     case "administrador":
       return "super_admin";
     case "asistente":
@@ -40,7 +75,7 @@ export function normalizeRole(role: AppRole | null): AppRole | null {
     case "cliente":
       return "cliente_inmobiliaria";
     default:
-      return role;
+      return canonical;
   }
 }
 

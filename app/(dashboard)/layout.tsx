@@ -13,7 +13,12 @@ export default async function DashboardLayout({
   const { role } = profile;
   const navItems = getHeaderNavGroupsByRole(role);
   const displayName = profile.fullName || profile.email || "Usuario";
-  const empresa = profile.clientName ?? null;
+  const isSuperAdmin = role === "super_admin" || role === "administrador";
+  const empresa = isSuperAdmin
+    ? "CEO Creixer"
+    : profile.userType === "colaborador_creixer"
+      ? profile.organizationName ?? "Creixer Ingeniería S.A.S."
+      : profile.clientName ?? "Sin inmobiliaria asociada";
 
   return (
     <>

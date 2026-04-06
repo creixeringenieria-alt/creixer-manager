@@ -104,10 +104,18 @@ export async function updateSession(request: NextRequest) {
           if (complementaryError) {
             console.error("[auth][middleware] complementary profile lookup failed:", complementaryError.message);
           }
-          isProfileComplete = isComplementaryProfileComplete(complementaryData);
+          const metadataComplementary =
+            typeof user.user_metadata?.complementary_profile === "object" && user.user_metadata?.complementary_profile
+              ? user.user_metadata.complementary_profile
+              : null;
+          isProfileComplete = isComplementaryProfileComplete(complementaryData ?? metadataComplementary);
         } catch (error) {
           console.error("[auth][middleware] complementary profile lookup unexpected error:", error);
-          isProfileComplete = false;
+          const metadataComplementary =
+            typeof user.user_metadata?.complementary_profile === "object" && user.user_metadata?.complementary_profile
+              ? user.user_metadata.complementary_profile
+              : null;
+          isProfileComplete = isComplementaryProfileComplete(metadataComplementary);
         }
       }
 

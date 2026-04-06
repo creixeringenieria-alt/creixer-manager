@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { getCurrentUserPermissions, requirePagePermission } from "@/lib/auth/permissions";
+import { getCurrentUserPermissions } from "@/lib/auth/permissions";
 import { isComplementaryProfileComplete } from "@/lib/auth/profile-completion";
 import { CORE_APP_ROLES } from "@/lib/auth/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -51,8 +51,14 @@ interface UserRow {
 }
 
 export default async function ConfiguracionUsuariosPage() {
-  await requirePagePermission("editar_casos", "/dashboard", "Acceso denegado a configuración de usuarios.");
   const context = await getCurrentUserPermissions();
+  if (!context.userId) {
+    return (
+      <main>
+        <p className="feedback error">Debes iniciar sesión.</p>
+      </main>
+    );
+  }
   if (context.normalizedRole !== "super_admin") {
     return (
       <main>
@@ -82,7 +88,10 @@ export default async function ConfiguracionUsuariosPage() {
           <h1>Configuración - Usuarios</h1>
           <p>Usuarios autenticados, rol vigente e inmobiliaria asociada.</p>
         </div>
-        <Link href="/dashboard/configuracion">Volver a configuración</Link>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+          <Link href="/dashboard/configuracion/usuarios/export">Descargar CSV</Link>
+          <Link href="/dashboard/configuracion">Volver a configuración</Link>
+        </div>
       </div>
 
       {error ? <p className="feedback error">No fue posible cargar usuarios: {error.message}</p> : null}

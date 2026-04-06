@@ -65,32 +65,24 @@ export async function requireCurrentProfile(): Promise<CurrentProfileResult> {
     redirect("/acceso-incompleto?error=Tu%20usuario%20no%20tiene%20rol%20configurado.");
   }
 
-  let complementary: ComplementaryProfileData | null = null;
-  if (role === "super_admin" || role === "administrador") {
-    const metaComplementary =
-      typeof user.user_metadata?.complementary_profile === "object" && user.user_metadata?.complementary_profile
-        ? (user.user_metadata.complementary_profile as ComplementaryProfileData)
-        : null;
-    complementary = metaComplementary;
-  } else {
-    const { data: complementaryData, error: complementaryError } = await supabase
-      .from("profile_complementary_data")
-      .select(
-        "fecha_nacimiento, grupo_sanguineo_rh, eps, arl, fondo_pension, fondo_cesantias, direccion_residencia, ciudad_residencia, contacto_emergencia_nombre, contacto_emergencia_telefono, parentesco_contacto_emergencia, observaciones_medicas_relevantes"
-      )
-      .eq("id", user.id)
-      .maybeSingle();
+  const { data: complementaryData, error: complementaryError } = await supabase
+    .from("profile_complementary_data")
+    .select(
+      "fecha_nacimiento, grupo_sanguineo_rh, eps, arl, fondo_pension, fondo_cesantias, direccion_residencia, ciudad_residencia, contacto_emergencia_nombre, contacto_emergencia_telefono, parentesco_contacto_emergencia, observaciones_medicas_relevantes"
+    )
+    .eq("id", user.id)
+    .maybeSingle();
 
-    if (complementaryError) {
-      console.error("[auth][current-profile] complementary profile lookup failed", complementaryError.message);
-    }
-    const dbComplementary = (complementaryData as ComplementaryProfileData | null) ?? null;
-    const metaComplementary =
-      typeof user.user_metadata?.complementary_profile === "object" && user.user_metadata?.complementary_profile
-        ? (user.user_metadata.complementary_profile as ComplementaryProfileData)
-        : null;
-    complementary = dbComplementary ?? metaComplementary;
+  if (complementaryError) {
+    console.error("[auth][current-profile] complementary profile lookup failed", complementaryError.message);
   }
+
+  const dbComplementary = (complementaryData as ComplementaryProfileData | null) ?? null;
+  const metaComplementary =
+    typeof user.user_metadata?.complementary_profile === "object" && user.user_metadata?.complementary_profile
+      ? (user.user_metadata.complementary_profile as ComplementaryProfileData)
+      : null;
+  const complementary: ComplementaryProfileData | null = dbComplementary ?? metaComplementary;
 
   return {
     userId: user.id as string,

@@ -148,8 +148,8 @@ export async function crearProyectoTecnicoAction(formData: FormData) {
   const startDate = toText(formData, "start_date");
   const plannedEndDate = toText(formData, "estimated_end_date") ?? toText(formData, "planned_end_date");
 
-  if (!clientId || !type || !name || !startDate || !plannedEndDate) {
-    return fail(path, "Cliente, tipo, nombre, fecha inicio y fecha fin planeada son obligatorios.");
+  if (!clientId || !type || !name || !startDate) {
+    return fail(path, "Cliente, tipo, código interno y fecha inicio son obligatorios.");
   }
 
   const supabase = createAdminClient();
@@ -159,10 +159,12 @@ export async function crearProyectoTecnicoAction(formData: FormData) {
       client_id: clientId,
       type,
       name,
+      internal_client_code: name,
       description: toText(formData, "description"),
       location: toText(formData, "location"),
       linked_request_id: toText(formData, "linked_request_id"),
-      status: toText(formData, "status") ?? "planeado",
+      request_category: toText(formData, "request_category"),
+      status: toText(formData, "status") ?? "en_visita",
       start_date: startDate,
       planned_end_date: plannedEndDate,
       priority: toText(formData, "priority") ?? "media",
@@ -173,6 +175,12 @@ export async function crearProyectoTecnicoAction(formData: FormData) {
     .single();
 
   if (error || !data) {
+    if (error?.message?.includes("no unique or exclusion constraint matching the ON CONFLICT specification")) {
+      return fail(
+        path,
+        "Falta aplicar la migración financiera nueva en Supabase (trigger ON CONFLICT). Ejecuta: supabase db push."
+      );
+    }
     return fail(path, error?.message ?? "No se pudo crear el proyecto.");
   }
 

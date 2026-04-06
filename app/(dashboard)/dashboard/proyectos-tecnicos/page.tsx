@@ -249,6 +249,7 @@ export default async function ProyectosTecnicosPage({ searchParams }: ProyectosT
           <span className="status-pill">{`mantenimiento: ${projectsByType.mantenimiento ?? 0}`}</span>
           <span className="status-pill">{`consultoria: ${projectsByType.consultoria ?? 0}`}</span>
           <span className="status-pill">{`interventoria: ${projectsByType.interventoria ?? 0}`}</span>
+          <span className="status-pill">{`obra_conjunto_residencial: ${projectsByType.obra_conjunto_residencial ?? 0}`}</span>
         </div>
       </section>
 
@@ -288,11 +289,12 @@ export default async function ProyectosTecnicosPage({ searchParams }: ProyectosT
               <option value="mantenimiento">mantenimiento</option>
               <option value="consultoria">consultoria</option>
               <option value="interventoria">interventoria</option>
+              <option value="obra_conjunto_residencial">obra_conjunto_residencial</option>
             </select>
           </div>
           <div className="form-field">
             <label className="form-field-label" htmlFor="project-name">
-              Nombre del proyecto
+              Código interno de la inmobiliaria
             </label>
             <input id="project-name" name="name" required />
           </div>
@@ -303,8 +305,21 @@ export default async function ProyectosTecnicosPage({ searchParams }: ProyectosT
             <input id="project-location" name="location" />
           </div>
           <div className="form-field">
+            <label className="form-field-label" htmlFor="project-request-category">
+              Caso/requerimiento
+            </label>
+            <select id="project-request-category" name="request_category" required defaultValue="mantenimiento_general">
+              <option value="hidraulico">hidraulico</option>
+              <option value="electrico">electrico</option>
+              <option value="gasodomestico">gasodomestico</option>
+              <option value="albanileria">albanileria</option>
+              <option value="acabados">acabados</option>
+              <option value="mantenimiento_general">mantenimiento_general</option>
+            </select>
+          </div>
+          <div className="form-field">
             <label className="form-field-label" htmlFor="project-linked-request-id">
-              Caso/requerimiento (opcional)
+              Vincular requerimiento existente (opcional)
             </label>
             <select id="project-linked-request-id" name="linked_request_id">
               <option value="">Sin requerimiento relacionado</option>
@@ -319,10 +334,12 @@ export default async function ProyectosTecnicosPage({ searchParams }: ProyectosT
             <label className="form-field-label" htmlFor="project-status">
               Estado
             </label>
-            <select id="project-status" name="status" defaultValue="planeado">
+            <select id="project-status" name="status" defaultValue="en_visita">
+              <option value="en_visita">en_visita</option>
               <option value="planeado">planeado</option>
               <option value="en_ejecucion">en_ejecucion</option>
               <option value="en_pausa">en_pausa</option>
+              <option value="completado">completado</option>
             </select>
           </div>
           <div className="form-field">
@@ -346,7 +363,7 @@ export default async function ProyectosTecnicosPage({ searchParams }: ProyectosT
             <label className="form-field-label" htmlFor="project-estimated-end-date">
               Fecha estimada de entrega
             </label>
-            <input id="project-estimated-end-date" type="date" name="estimated_end_date" required />
+            <input id="project-estimated-end-date" type="date" name="estimated_end_date" />
           </div>
           <div className="form-field">
             <label className="form-field-label" htmlFor="project-technical-lead-id">

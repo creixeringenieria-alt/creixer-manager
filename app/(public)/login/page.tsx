@@ -38,7 +38,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         )
         .eq("id", user.id)
         .maybeSingle();
-      if (!isComplementaryProfileComplete(complementaryData)) {
+      const complementaryFromMetadata =
+        typeof user.user_metadata?.complementary_profile === "object" && user.user_metadata?.complementary_profile
+          ? user.user_metadata.complementary_profile
+          : null;
+      if (!isComplementaryProfileComplete(complementaryData ?? complementaryFromMetadata)) {
         redirect("/dashboard/perfil/completar");
       }
       redirect("/dashboard");

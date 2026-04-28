@@ -153,6 +153,25 @@ export async function crearProyectoTecnicoAction(formData: FormData) {
   }
 
   const supabase = createAdminClient();
+  const dedupeWindowStart = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const { data: existingRecent } = await supabase
+    .from("technical_projects")
+    .select("id, created_at")
+    .eq("client_id", clientId)
+    .eq("type", type)
+    .eq("name", name)
+    .eq("start_date", startDate)
+    .gte("created_at", dedupeWindowStart)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingRecent?.id) {
+    revalidatePath("/dashboard/proyectos-tecnicos");
+    revalidatePath(`/dashboard/proyectos-tecnicos/${existingRecent.id}`);
+    return ok(`/dashboard/proyectos-tecnicos/${existingRecent.id}`, "Proyecto ya existía y se reutilizó para evitar duplicados.");
+  }
+
   const payload: Record<string, string | null> = {
     client_id: clientId,
     type,

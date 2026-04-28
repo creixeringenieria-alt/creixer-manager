@@ -58,6 +58,7 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
 
   const clients = ((clientsResp.data ?? []) as ClientRow[]) || [];
   const recentCases = ((recentCasesResp.data ?? []) as CaseRow[]) || [];
+  const creationToken = crypto.randomUUID();
 
   return (
     <main>
@@ -75,6 +76,7 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
       <section className="card">
         <h2>Crear caso</h2>
         <form action={crearCasoAction} className="form-grid">
+          <input type="hidden" name="creation_token" value={creationToken} />
           <div className="form-field">
             <label htmlFor="case-client-id">Cliente / Inmobiliaria</label>
             <select id="case-client-id" name="client_id" required defaultValue="">
@@ -180,6 +182,35 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
           <div className="form-field" style={{ gridColumn: "1 / -1" }}>
             <label htmlFor="case-description">Descripción del caso</label>
             <textarea id="case-description" name="description" placeholder="Detalle operativo del caso" />
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="case-document-type">Tipo de documento inicial</label>
+            <select id="case-document-type" name="case_document_type" defaultValue="archivo_tecnico">
+              <option value="convocatoria">convocatoria</option>
+              <option value="terminos_referencia">terminos_referencia</option>
+              <option value="anexos">anexos</option>
+              <option value="planos">planos</option>
+              <option value="documento_cliente">documento_cliente</option>
+              <option value="archivo_tecnico">archivo_tecnico</option>
+              <option value="otro">otro</option>
+            </select>
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="case-document-name">Nombre para documentos (opcional)</label>
+            <input id="case-document-name" name="case_document_name" placeholder="Ej: soporte inicial del caso" />
+          </div>
+
+          <div className="form-field" style={{ gridColumn: "1 / -1" }}>
+            <label htmlFor="case-files">Fotos y archivos iniciales</label>
+            <input
+              id="case-files"
+              name="case_files"
+              type="file"
+              multiple
+              accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.zip,.rar"
+            />
           </div>
 
           <div className="span-2" style={{ fontSize: "0.9rem", color: "#475569" }}>

@@ -41,10 +41,22 @@ export async function updateSession(request: NextRequest) {
       }
     );
 
+    const getUserResult = await Promise.race([
+      supabase.auth.getUser(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2200))
+    ]);
+
+    if (!getUserResult) {
+      console.error("[auth][middleware] getUser timeout, allowing request to continue safely", {
+        pathname
+      });
+      return response;
+    }
+
     const {
       data: { user },
       error: userError
-    } = await supabase.auth.getUser();
+    } = getUserResult;
 
     if (userError) {
       console.error("[auth][middleware] getUser failed:", userError.message);
@@ -80,62 +92,15 @@ export async function updateSession(request: NextRequest) {
           ? user.user_metadata.role
           : null);
 
-      let roleFromProfile: AppRole | null = null;
-      if (!metadataRole || isAccessIncompleteRoute) {
-        try {
-          const { data: profile, error: profileError } = (await supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", user.id)
-            .maybeSingle()) as {
-            data: { role?: string } | null;
-            error?: { message?: string } | null;
-          };
-          if (profileError) {
-            console.error("[auth][middleware] profile role lookup failed:", profileError.message);
-          } else {
-            roleFromProfile = typeof profile?.role === "string" && isValidRole(profile.role) ? (profile.role as AppRole) : null;
-          }
-        } catch (profileLookupError) {
-          console.error("[auth][middleware] profile role lookup exception:", profileLookupError);
-        }
-      }
+      // Edge middleware must stay lightweight; avoid DB profile queries here.
+      const role = metadataRole;
 
-      const role = roleFromProfile ?? metadataRole;
-
-      let isProfileComplete = false;
-      if (role === "super_admin" || role === "administrador") {
-        isProfileComplete = true;
-      } else {
-        try {
-          const metadataComplementary =
-            typeof user.user_metadata?.complementary_profile === "object" && user.user_metadata?.complementary_profile
-              ? user.user_metadata.complementary_profile
-              : null;
-          if (isComplementaryProfileComplete(metadataComplementary)) {
-            isProfileComplete = true;
-          } else {
-            const { data: complementaryData, error: complementaryError } = await supabase
-              .from("profile_complementary_data")
-              .select(
-                "fecha_nacimiento, grupo_sanguineo_rh, eps, arl, fondo_pension, fondo_cesantias, direccion_residencia, ciudad_residencia, contacto_emergencia_nombre, contacto_emergencia_telefono, parentesco_contacto_emergencia, observaciones_medicas_relevantes"
-              )
-              .eq("id", user.id)
-              .maybeSingle();
-            if (complementaryError) {
-              console.error("[auth][middleware] complementary profile lookup failed:", complementaryError.message);
-            }
-            isProfileComplete = isComplementaryProfileComplete(complementaryData ?? metadataComplementary);
-          }
-        } catch (error) {
-          console.error("[auth][middleware] complementary profile lookup unexpected error:", error);
-          const metadataComplementary =
-            typeof user.user_metadata?.complementary_profile === "object" && user.user_metadata?.complementary_profile
-              ? user.user_metadata.complementary_profile
-              : null;
-          isProfileComplete = isComplementaryProfileComplete(metadataComplementary);
-        }
-      }
+      const metadataComplementary =
+        typeof user.user_metadata?.complementary_profile === "object" && user.user_metadata?.complementary_profile
+          ? user.user_metadata.complementary_profile
+          : null;
+      const isProfileComplete =
+        role === "super_admin" || role === "administrador" || isComplementaryProfileComplete(metadataComplementary);
 
       if (!role) {
         console.warn("[auth][middleware] session without valid profile/role", {

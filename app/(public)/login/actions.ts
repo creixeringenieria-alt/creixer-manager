@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 
 import { isComplementaryProfileComplete } from "@/lib/auth/profile-completion";
 import { getRoleHomePath, isValidRole } from "@/lib/auth/roles";
@@ -64,4 +65,31 @@ export async function loginWithPasswordAction(formData: FormData) {
   }
 
   redirect(getRoleHomePath(role));
+}
+
+export async function solicitarRecuperacionAction(formData: FormData) {
+  const email = toText(formData, "email");
+  if (!email) {
+    redirect("/recuperar-acceso?error=Debes%20ingresar%20un%20correo.");
+  }
+
+  const supabase = (await createClient()) as any;
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "creixer-manager.vercel.app";
+  const origin = `${proto}://${host}`;
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${origin}/restablecer-contrasena`
+  });
+
+  if (error) {
+    redirect(`/recuperar-acceso?error=${encodeURIComponent("No fue posible enviar el enlace de recuperación.")}`);
+  }
+
+  redirect(
+    `/login?ok=${encodeURIComponent(
+      "Te enviamos un enlace de recuperación. Revisa tu correo para restablecer la contraseña."
+    )}`
+  );
 }

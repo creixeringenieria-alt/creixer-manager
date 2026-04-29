@@ -65,6 +65,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <input type="password" name="password" placeholder="Contraseña" required />
           <button type="submit">Iniciar sesión</button>
         </form>
+
+        <p style={{ marginTop: "0.75rem", textAlign: "center" }}>
+          <a href="/recuperar-acceso">¿Olvidaste tu contraseña?</a>
+        </p>
       </div>
     </main>
   );

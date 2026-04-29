@@ -79,12 +79,20 @@ export async function solicitarRecuperacionAction(formData: FormData) {
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "creixer-manager.vercel.app";
   const origin = `${proto}://${host}`;
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+  const firstAttempt = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${origin}/restablecer-contrasena`
   });
 
-  if (error) {
-    redirect(`/recuperar-acceso?error=${encodeURIComponent("No fue posible enviar el enlace de recuperación.")}`);
+  let finalError = firstAttempt.error ?? null;
+  if (finalError) {
+    // Fallback: use Supabase SITE_URL in case redirectTo is not allow-listed yet.
+    const retry = await supabase.auth.resetPasswordForEmail(email);
+    finalError = retry.error ?? null;
+  }
+
+  if (finalError) {
+    const detail = encodeURIComponent(finalError.message ?? "No fue posible enviar el enlace de recuperación.");
+    redirect(`/recuperar-acceso?error=${detail}`);
   }
 
   redirect(

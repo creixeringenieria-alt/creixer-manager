@@ -72,6 +72,7 @@ export default async function ProyectosTecnicosPage({ searchParams }: ProyectosT
     "Acceso denegado: tu rol no puede acceder a proyectos técnicos."
   );
 
+  try {
   const route = "/dashboard/proyectos-tecnicos";
   const params = await searchParams;
   let hasQueryFailure = false;
@@ -496,4 +497,28 @@ export default async function ProyectosTecnicosPage({ searchParams }: ProyectosT
       </section>
     </main>
   );
+  } catch (error) {
+    console.error("[dashboard/proyectos-tecnicos] page fallback rendered", {
+      route: "/dashboard/proyectos-tecnicos",
+      error: error instanceof Error ? error.message : String(error)
+    });
+
+    return (
+      <main>
+        <section className="card">
+          <h1 style={{ marginTop: 0 }}>Proyectos técnicos</h1>
+          <p>
+            No fue posible cargar el tablero completo de proyectos técnicos en este momento, pero puedes continuar la
+            operación creando el caso desde la vista estable.
+          </p>
+          <p className="feedback error">No fue posible cargar proyectos técnicos.</p>
+          <div className="inline-form">
+            <Link href="/dashboard/casos/nuevo">Crear caso</Link>
+            <Link href="/dashboard/casos">Ver casos</Link>
+            <Link href="/dashboard">Volver al dashboard</Link>
+          </div>
+        </section>
+      </main>
+    );
+  }
 }

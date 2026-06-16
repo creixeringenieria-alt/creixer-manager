@@ -102,7 +102,7 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
   {
     id: "proyectos",
     label: "Proyectos",
-    href: "/dashboard/proyectos-tecnicos",
+    href: "/dashboard/casos/nuevo",
     roles: ["super_admin", "gerente_operativo", "administrativo", "lider_operativo"]
   },
   { id: "comercial", label: "Comercial", href: "/dashboard/cotizaciones", roles: ["super_admin", "gerente_operativo", "administrativo", "lider_operativo"] },

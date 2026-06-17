@@ -38,6 +38,7 @@ export async function crearInmobiliariaAction(formData: FormData) {
   const supabase = createAdminClient();
   const { error } = await supabase.from("clients").insert({
     name,
+    client_type: "Inmobiliaria",
     tax_id: cleanValue(formData.get("tax_id")),
     contact_name: cleanValue(formData.get("contact_name")),
     contact_email: cleanValue(formData.get("contact_email")),
@@ -67,6 +68,7 @@ export async function actualizarInmobiliariaAction(formData: FormData) {
     .from("clients")
     .update({
       name,
+      client_type: "Inmobiliaria",
       tax_id: cleanValue(formData.get("tax_id")),
       contact_name: cleanValue(formData.get("contact_name")),
       contact_email: cleanValue(formData.get("contact_email")),
@@ -82,4 +84,3 @@ export async function actualizarInmobiliariaAction(formData: FormData) {
   revalidatePath("/dashboard/inmobiliarias");
   return ok("Inmobiliaria actualizada.");
 }
-

@@ -17,7 +17,7 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
 
   const { data: clients, error } = await supabase
     .from("clients")
-    .select("id, name, documentary_prefix, tax_id, contact_name, contact_email, contact_phone, is_active")
+    .select("id, name, client_type, documentary_prefix, tax_id, contact_name, contact_email, contact_phone, is_active")
     .order("created_at", { ascending: false });
 
   return (
@@ -37,6 +37,13 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
         <h2>Crear cliente</h2>
         <form action={createClientAction} className="client-form-grid">
           <input name="name" placeholder="Nombre del cliente" required />
+          <select name="client_type" defaultValue="">
+            <option value="">Tipo de cliente</option>
+            <option value="Inmobiliaria">Inmobiliaria</option>
+            <option value="Empresa">Empresa</option>
+            <option value="Persona natural">Persona natural</option>
+            <option value="Conjunto Residencial">Conjunto Residencial</option>
+          </select>
           <input name="documentary_prefix" placeholder="Prefijo documental (ej: CRM)" maxLength={12} />
           <input name="tax_id" placeholder="NIT" />
           <input name="contact_name" placeholder="Nombre de contacto" />
@@ -59,6 +66,13 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
                 <form action={updateClientAction} className="client-form-grid">
                   <input type="hidden" name="id" value={client.id} />
                   <input name="name" defaultValue={client.name} required />
+                  <select name="client_type" defaultValue={client.client_type ?? ""}>
+                    <option value="">Tipo de cliente</option>
+                    <option value="Inmobiliaria">Inmobiliaria</option>
+                    <option value="Empresa">Empresa</option>
+                    <option value="Persona natural">Persona natural</option>
+                    <option value="Conjunto Residencial">Conjunto Residencial</option>
+                  </select>
                   <input
                     name="documentary_prefix"
                     defaultValue={client.documentary_prefix ?? ""}

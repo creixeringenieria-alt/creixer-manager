@@ -31,6 +31,18 @@ function parsePrefix(value: FormDataEntryValue | null) {
   return normalized;
 }
 
+function parseClientType(value: FormDataEntryValue | null) {
+  const raw = cleanValue(value);
+  if (!raw) return null;
+
+  const allowed = ["Inmobiliaria", "Empresa", "Persona natural", "Conjunto Residencial"];
+  if (!allowed.includes(raw)) {
+    throw new Error("Tipo de cliente inválido.");
+  }
+
+  return raw;
+}
+
 function errorRedirect(message: string) {
   redirect(`/dashboard/clientes?error=${encodeURIComponent(message)}`);
 }
@@ -53,6 +65,7 @@ export async function createClientAction(formData: FormData) {
 
     const { error } = await supabase.from("clients").insert({
       name,
+      client_type: parseClientType(formData.get("client_type")),
       tax_id: cleanValue(formData.get("tax_id")),
       contact_name: cleanValue(formData.get("contact_name")),
       contact_email: cleanValue(formData.get("contact_email")),
@@ -89,6 +102,7 @@ export async function updateClientAction(formData: FormData) {
       .from("clients")
       .update({
         name,
+        client_type: parseClientType(formData.get("client_type")),
         tax_id: cleanValue(formData.get("tax_id")),
         contact_name: cleanValue(formData.get("contact_name")),
         contact_email: cleanValue(formData.get("contact_email")),

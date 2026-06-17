@@ -16,7 +16,8 @@ export default async function InmobiliariasPage({ searchParams }: InmobiliariasP
   const supabase = createAdminClient();
   const { data: inmobiliarias, error } = await supabase
     .from("clients")
-    .select("id, name, tax_id, contact_name, contact_email, contact_phone, is_active, created_at")
+    .select("id, name, client_type, tax_id, contact_name, contact_email, contact_phone, is_active, created_at")
+    .eq("client_type", "Inmobiliaria")
     .order("created_at", { ascending: false });
 
   return (
@@ -74,4 +75,3 @@ export default async function InmobiliariasPage({ searchParams }: InmobiliariasP
     </main>
   );
 }
-

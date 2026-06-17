@@ -12,6 +12,9 @@ interface NuevoCasoPageProps {
 interface ClientRow {
   id: string;
   name: string;
+  client_type?: string | null;
+  tax_id?: string | null;
+  documentary_prefix?: string | null;
 }
 
 interface CaseRow {
@@ -27,7 +30,7 @@ interface CaseRow {
   billing_client_id?: string | null;
   status?: string | null;
   created_at: string;
-  clients?: { name?: string } | { name?: string }[] | null;
+  clients?: { name?: string; client_type?: string | null } | { name?: string; client_type?: string | null }[] | null;
 }
 
 export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoPageProps) {
@@ -40,7 +43,7 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
   let recentCasesQuery = supabase
     .from("cases")
     .select(
-      "id, case_code, flow_type, service_area, internal_client_code, external_property_code, external_case_id, external_case_code, bill_to_assigned_client, billing_client_id, status, created_at, clients(name)"
+      "id, case_code, flow_type, service_area, internal_client_code, external_property_code, external_case_id, external_case_code, bill_to_assigned_client, billing_client_id, status, created_at, clients(name, client_type)"
     )
     .order("created_at", { ascending: false })
     .limit(30);
@@ -52,7 +55,7 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
   }
 
   const [clientsResp, recentCasesResp] = await Promise.all([
-    supabase.from("clients").select("id, name").eq("is_active", true).order("name"),
+    supabase.from("clients").select("id, name, client_type, tax_id, documentary_prefix").eq("is_active", true).order("name"),
     recentCasesQuery
   ]);
 
@@ -78,14 +81,15 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
         <form action={crearCasoAction} className="form-grid">
           <input type="hidden" name="creation_token" value={creationToken} />
           <div className="form-field">
-            <label htmlFor="case-client-id">Cliente / Inmobiliaria</label>
+            <label htmlFor="case-client-id">Cliente / Tercero</label>
             <select id="case-client-id" name="client_id" required defaultValue="">
               <option value="" disabled>
-                Seleccionar cliente
+                Seleccionar cliente o tercero
               </option>
               {clients.map((client) => (
                 <option key={client.id} value={client.id}>
                   {client.name}
+                  {client.client_type ? ` — ${client.client_type}` : ""}
                 </option>
               ))}
             </select>
@@ -103,18 +107,18 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
           </div>
 
           <div className="form-field">
-            <label htmlFor="case-internal-client-code">Código interno de la inmobiliaria</label>
-            <input id="case-internal-client-code" name="internal_client_code" placeholder="Ej: APT-503-TORRE2" />
+            <label htmlFor="case-internal-client-code">Código interno / referencia del cliente</label>
+            <input id="case-internal-client-code" name="internal_client_code" placeholder="Ej: BYP, APT-503-TORRE2 o referencia interna" />
           </div>
 
           <div className="form-field">
-            <label htmlFor="case-external-property-code">N° Inmueble / ID / Código del cliente</label>
-            <input id="case-external-property-code" name="external_property_code" placeholder="Referencia tal como la maneja la inmobiliaria" />
+            <label htmlFor="case-external-property-code">N° inmueble / identificación / referencia</label>
+            <input id="case-external-property-code" name="external_property_code" placeholder="Inmobiliaria: inmueble. Persona: cédula. Conjunto: NIT." />
           </div>
 
           <div className="form-field">
             <label htmlFor="case-external-id">ID externo del caso (opcional)</label>
-            <input id="case-external-id" name="external_case_id" placeholder="ID interno del cliente" />
+            <input id="case-external-id" name="external_case_id" placeholder="Si lo dejas vacío, usará el consecutivo del caso" />
           </div>
 
           <div className="form-field">
@@ -136,7 +140,7 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
 
           <div className="form-field">
             <label htmlFor="case-status">Estado inicial</label>
-            <input id="case-status" value="en_visita" readOnly />
+            <input id="case-status" value="creado" readOnly />
           </div>
 
           <div className="form-field">
@@ -150,25 +154,21 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
           </div>
 
           <div className="form-field">
-            <label htmlFor="case-estimated-delivery">Fecha estimada de entrega (después de aprobación)</label>
-            <input id="case-estimated-delivery" name="estimated_delivery_date" type="date" />
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="case-bill-to-assigned">¿Se factura a esta inmobiliaria?</label>
+            <label htmlFor="case-bill-to-assigned">Facturación inicial</label>
             <select id="case-bill-to-assigned" name="bill_to_assigned_client" defaultValue="si">
-              <option value="si">Sí, se factura a la inmobiliaria asignada</option>
-              <option value="no">No, se factura a otro cliente/tercero</option>
+              <option value="si">Facturar al cliente/tercero asignado</option>
+              <option value="no">Otro / por definir después de aprobación</option>
             </select>
           </div>
 
           <div className="form-field">
-            <label htmlFor="case-billing-client-id">Cliente a facturar (si es diferente)</label>
+            <label htmlFor="case-billing-client-id">Cliente a facturar (opcional)</label>
             <select id="case-billing-client-id" name="billing_client_id" defaultValue="">
-              <option value="">Sin cambio (usar inmobiliaria asignada)</option>
+              <option value="">Otro / por definir</option>
               {clients.map((client) => (
                 <option key={client.id} value={client.id}>
                   {client.name}
+                  {client.client_type ? ` — ${client.client_type}` : ""}
                 </option>
               ))}
             </select>
@@ -214,8 +214,9 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
           </div>
 
           <div className="span-2" style={{ fontSize: "0.9rem", color: "#475569" }}>
-            Al guardar, el sistema asigna consecutivo automáticamente (ejemplo: <strong>CAS-000001</strong>) y te envía al
-            flujo correspondiente para continuar la operación.
+            Al guardar, el sistema asigna consecutivo automáticamente (ejemplo: <strong>CAS-000001</strong>). Si no escribes
+            ID externo, el sistema usará ese consecutivo como referencia inicial. La fecha estimada de entrega se definirá
+            después de aprobación cuando aplique.
           </div>
 
           <button type="submit">Crear caso con consecutivo</button>
@@ -252,7 +253,10 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
                 return (
                   <tr key={row.id}>
                     <td>{row.case_code ?? `CASO-${row.id.slice(0, 8).toUpperCase()}`}</td>
-                    <td>{clientRow?.name ?? "-"}</td>
+                    <td>
+                      {clientRow?.name ?? "-"}
+                      {clientRow?.client_type ? ` (${clientRow.client_type})` : ""}
+                    </td>
                     <td>{[row.internal_client_code, row.external_property_code, row.external_case_id, row.external_case_code].filter(Boolean).join(" | ") || "-"}</td>
                     <td>{row.flow_type ?? "-"}</td>
                     <td>{row.service_area ?? "-"}</td>

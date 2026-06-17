@@ -100,7 +100,6 @@ async function crearProyectoDesdeCaso(params: {
   internalClientCode: string | null;
   description: string | null;
   priority: string;
-  estimatedDeliveryDate: string | null;
   userId: string | null;
   creationToken: string | null;
 }) {
@@ -121,9 +120,9 @@ async function crearProyectoDesdeCaso(params: {
     internal_client_code: params.internalClientCode ?? name,
     description: params.description,
     request_category: params.serviceArea,
-    status: "en_visita",
+    status: "creado",
     start_date: nowIsoDate,
-    planned_end_date: params.estimatedDeliveryDate,
+    planned_end_date: null,
     priority: params.priority,
     technical_lead_id: params.userId,
     director_responsible_id: params.userId,
@@ -148,7 +147,7 @@ async function crearProyectoDesdeCaso(params: {
       payload.type = "mantenimiento";
       continue;
     }
-    if (message.includes('invalid input value for enum technical_project_status') && payload.status === "en_visita") {
+    if (message.includes('invalid input value for enum technical_project_status') && payload.status === "creado") {
       payload.status = "planeado";
       continue;
     }
@@ -182,7 +181,6 @@ export async function crearCasoAction(formData: FormData) {
   const externalCaseCode = textValue(formData, "external_case_code");
   const description = textValue(formData, "description");
   const priority = textValue(formData, "priority") ?? "media";
-  const estimatedDeliveryDate = textValue(formData, "estimated_delivery_date");
   const billToAssignedClient = (textValue(formData, "bill_to_assigned_client") ?? "si") === "si";
   const billingClientIdInput = textValue(formData, "billing_client_id");
   const billingObservations = textValue(formData, "billing_observations");
@@ -191,21 +189,23 @@ export async function crearCasoAction(formData: FormData) {
   if (!clientId || !flowType || !serviceArea) {
     return fail("Cliente, tipo de proyecto y especialidad son obligatorios.");
   }
-  if (!billToAssignedClient && !billingClientIdInput) {
-    return fail("Si no se factura a la inmobiliaria asignada, debes seleccionar a quién se factura.");
-  }
 
   const supabase = createAdminClient() as any;
   const currentClient = (await createClient()) as any;
   const {
-    data: { user }
+      data: { user }
   } = await currentClient.auth.getUser();
+  const billingObservationsFinal =
+    billingObservations ??
+    (!billToAssignedClient && !billingClientIdInput
+      ? "Cliente a facturar pendiente por definir después de aprobación."
+      : null);
 
   const payload: Record<string, unknown> = {
     client_id: clientId,
     title: internalClientCode ?? `${flowType} - ${serviceArea}`,
     description,
-    status: "en_visita",
+    status: "creado",
     priority,
     flow_type: flowType,
     service_area: serviceArea,
@@ -214,11 +214,11 @@ export async function crearCasoAction(formData: FormData) {
     external_case_id: externalCaseId,
     external_case_code: externalCaseCode,
     start_with_visit: true,
-    current_stage: "en_visita",
-    estimated_delivery_date: estimatedDeliveryDate,
+    current_stage: "creado",
+    estimated_delivery_date: null,
     bill_to_assigned_client: billToAssignedClient,
     billing_client_id: billToAssignedClient ? clientId : billingClientIdInput,
-    billing_observations: billingObservations,
+    billing_observations: billingObservationsFinal,
     created_by: user?.id ?? null,
     creation_token: creationToken
   };
@@ -242,7 +242,7 @@ export async function crearCasoAction(formData: FormData) {
       continue;
     }
 
-    if (message.includes('invalid input value for enum') && payload.status === "en_visita") {
+    if (message.includes('invalid input value for enum') && payload.status === "creado") {
       payload.status = "pendiente";
       payload.current_stage = "pendiente";
       continue;
@@ -273,6 +273,12 @@ export async function crearCasoAction(formData: FormData) {
   }
 
   const caseCode = response.data.case_code ?? `CASO-${response.data.id.slice(0, 8).toUpperCase()}`;
+  if (!externalCaseId) {
+    await supabase
+      .from("cases")
+      .update({ external_case_id: caseCode })
+      .eq("id", response.data.id);
+  }
   revalidatePath("/dashboard/casos/nuevo");
   revalidatePath("/dashboard/casos");
 
@@ -292,7 +298,6 @@ export async function crearCasoAction(formData: FormData) {
     internalClientCode,
     description,
     priority,
-    estimatedDeliveryDate,
     userId: user?.id ?? null,
     creationToken
   });

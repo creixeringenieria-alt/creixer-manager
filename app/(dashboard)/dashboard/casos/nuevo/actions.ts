@@ -214,10 +214,13 @@ export async function crearCasoAction(formData: FormData) {
     external_case_id: externalCaseId,
     external_case_code: externalCaseCode,
     start_with_visit: true,
-    current_stage: "creado",
+    current_stage: "en_visita",
     estimated_delivery_date: null,
     bill_to_assigned_client: billToAssignedClient,
-    billing_client_id: billToAssignedClient ? clientId : billingClientIdInput,
+    // Produccion todavia conserva un constraint que exige billing_client_id.
+    // Si la facturacion queda "otro / por definir", usamos el cliente asignado
+    // como referencia temporal y bill_to_assigned_client=false conserva la intencion operativa.
+    billing_client_id: billToAssignedClient ? clientId : billingClientIdInput ?? clientId,
     billing_observations: billingObservationsFinal,
     created_by: user?.id ?? null,
     creation_token: creationToken
@@ -244,7 +247,7 @@ export async function crearCasoAction(formData: FormData) {
 
     if (message.includes('invalid input value for enum') && payload.status === "creado") {
       payload.status = "pendiente";
-      payload.current_stage = "pendiente";
+      payload.current_stage = "en_visita";
       continue;
     }
 

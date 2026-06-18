@@ -48,10 +48,128 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
     .maybeSingle();
 
   if (!financialResp.data) {
+    const caseResp = await supabase
+      .from("cases")
+      .select(
+        "id, case_code, title, description, status, priority, flow_type, service_area, current_stage, internal_client_code, external_property_code, external_case_id, external_case_code, bill_to_assigned_client, billing_observations, created_at, updated_at, client_id, clients(id, name, client_type)"
+      )
+      .eq("id", id)
+      .maybeSingle();
+
+    if (!caseResp.data) {
+      return (
+        <main>
+          <p className="feedback error">No se encontró el caso/proyecto consolidado.</p>
+          <Link href="/dashboard/casos">Volver a casos</Link>
+        </main>
+      );
+    }
+
+    const caseData = caseResp.data as any;
+    const caseClient = Array.isArray(caseData.clients) ? caseData.clients[0] : caseData.clients;
+
+    if (isClientInmobiliaria) {
+      const profileClientId = permissionContext.clientId;
+      if (!profileClientId || caseData.client_id !== profileClientId) {
+        return (
+          <main>
+            <p className="feedback error">Acceso denegado: este caso no pertenece a tu inmobiliaria.</p>
+            <Link href="/dashboard/casos">Volver a casos</Link>
+          </main>
+        );
+      }
+    }
+
+    const docsResp = await supabase
+      .from("case_documents")
+      .select("id, document_type, name, original_filename, file_url, created_at")
+      .eq("case_id", id)
+      .order("created_at", { ascending: false });
+
+    const docs = (docsResp.data ?? []) as any[];
+    const caseReference = [caseData.internal_client_code, caseData.external_property_code, caseData.external_case_id, caseData.external_case_code]
+      .filter(Boolean)
+      .join(" | ");
+
     return (
       <main>
-        <p className="feedback error">No se encontró el caso/proyecto consolidado.</p>
-        <Link href="/dashboard/finanzas">Volver a finanzas</Link>
+        <div className="page-header">
+          <div>
+            <h1>Expediente único de caso</h1>
+            <p>
+              {caseData.case_code ?? `Caso ${id.slice(0, 8)}`} | Estado: <strong>{caseData.status ?? "-"}</strong>
+            </p>
+          </div>
+          <div className="inline-form">
+            <Link href="/dashboard/casos">Volver a casos</Link>
+            {!isClientInmobiliaria ? <Link href="/dashboard/casos/nuevo">Crear otro caso</Link> : null}
+          </div>
+        </div>
+
+        {docsResp.error ? <p className="feedback error">No se pudieron cargar documentos: {docsResp.error.message}</p> : null}
+
+        <section className="card">
+          <h2 style={{ marginTop: 0 }}>Resumen</h2>
+          <p>
+            Cliente: <strong>{caseClient?.name ?? "-"}</strong>
+            {caseClient?.client_type ? ` (${caseClient.client_type})` : ""}
+          </p>
+          <p>
+            Tipo: <strong>{caseData.flow_type ?? "-"}</strong> | Requerimiento: <strong>{caseData.service_area ?? "-"}</strong> |
+            Prioridad: <strong>{caseData.priority ?? "-"}</strong>
+          </p>
+          <p>
+            Referencia cliente: <strong>{caseReference || "-"}</strong>
+          </p>
+          <p>
+            Etapa operativa: <strong>{caseData.current_stage ?? "-"}</strong> | Creado:{" "}
+            <strong>{dateTimeValue(caseData.created_at)}</strong>
+          </p>
+          <p>
+            Facturación:{" "}
+            <strong>{caseData.bill_to_assigned_client === false ? "Otro / por definir" : "Cliente asignado"}</strong>
+            {caseData.billing_observations ? ` | ${caseData.billing_observations}` : ""}
+          </p>
+        </section>
+
+        <section className="card" id="diagnostico">
+          <h2>Descripción / diagnóstico inicial</h2>
+          <p>{caseData.description ?? "Sin descripción registrada."}</p>
+        </section>
+
+        <section className="card" id="fotos-documentos">
+          <h2>Fotos / documentos</h2>
+          {docs.length === 0 ? <p>No hay documentos adjuntos en este caso.</p> : null}
+          {docs.length > 0 ? (
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Nombre</th>
+                    <th>Archivo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {docs.map((doc) => (
+                    <tr key={doc.id}>
+                      <td>{dateTimeValue(doc.created_at)}</td>
+                      <td>{doc.document_type}</td>
+                      <td>{doc.name}</td>
+                      <td>{doc.file_url ? <a href={doc.file_url}>{doc.original_filename}</a> : doc.original_filename}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="card" id="financiero">
+          <h2>Finanzas</h2>
+          <p>Este caso todavía no tiene ficha financiera detallada. Estado comercial inicial: sin_cotizacion.</p>
+        </section>
       </main>
     );
   }

@@ -287,8 +287,8 @@ export async function crearCasoAction(formData: FormData) {
 
   if (flowType === "mantenimiento" || flowType === "reparacion") {
     redirect(
-      `/dashboard/requerimientos?ok=${encodeURIComponent(
-        `Caso ${caseCode} creado. Continúa con el requerimiento y agenda de visita.`
+      `/dashboard/casos?ok=${encodeURIComponent(
+        `Caso ${caseCode} creado correctamente.`
       )}`
     );
   }

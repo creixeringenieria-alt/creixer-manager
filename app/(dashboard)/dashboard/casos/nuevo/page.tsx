@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { randomUUID } from "crypto";
 
 import { requirePagePermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -39,6 +40,7 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
   const params = await searchParams;
   const supabase = createAdminClient() as any;
   const queryText = (params.q ?? "").trim();
+  let loadError: string | null = null;
 
   let recentCasesQuery = supabase
     .from("cases")
@@ -54,14 +56,24 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
     );
   }
 
-  const [clientsResp, recentCasesResp] = await Promise.all([
+  const [clientsResp, recentCasesResp] = await Promise.allSettled([
     supabase.from("clients").select("id, name, client_type, tax_id, documentary_prefix").eq("is_active", true).order("name"),
     recentCasesQuery
   ]);
 
-  const clients = ((clientsResp.data ?? []) as ClientRow[]) || [];
-  const recentCases = ((recentCasesResp.data ?? []) as CaseRow[]) || [];
-  const creationToken = crypto.randomUUID();
+  const clientsResult = clientsResp.status === "fulfilled" ? clientsResp.value : { data: [], error: clientsResp.reason };
+  const recentCasesResult = recentCasesResp.status === "fulfilled" ? recentCasesResp.value : { data: [], error: recentCasesResp.reason };
+  const clients = ((clientsResult.data ?? []) as ClientRow[]) || [];
+  const recentCases = ((recentCasesResult.data ?? []) as CaseRow[]) || [];
+  const creationToken = randomUUID();
+
+  if (clientsResult.error) {
+    console.error("[/dashboard/casos/nuevo] clients query failed", clientsResult.error);
+    loadError = "No fue posible cargar clientes. Puedes intentar recargar la página.";
+  } else if (recentCasesResult.error) {
+    console.error("[/dashboard/casos/nuevo] recent cases query failed", recentCasesResult.error);
+    loadError = "No fue posible cargar últimos casos, pero puedes crear un caso nuevo.";
+  }
 
   return (
     <main>
@@ -75,6 +87,7 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
 
       {params.error ? <p className="feedback error">{params.error}</p> : null}
       {params.ok ? <p className="feedback success">{params.ok}</p> : null}
+      {loadError ? <p className="feedback error">{loadError}</p> : null}
 
       <section className="card">
         <h2>Crear caso</h2>
@@ -262,7 +275,7 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
                     <td>{row.service_area ?? "-"}</td>
                     <td>{row.bill_to_assigned_client === false ? "Tercero" : "Inmobiliaria"}</td>
                     <td>{row.status ?? "-"}</td>
-                    <td>{new Date(row.created_at).toLocaleDateString("es-CO")}</td>
+                    <td>{row.created_at ? new Date(row.created_at).toLocaleDateString("es-CO") : "-"}</td>
                   </tr>
                 );
               })}

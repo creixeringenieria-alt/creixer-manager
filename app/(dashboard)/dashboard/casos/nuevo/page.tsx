@@ -43,7 +43,7 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
   let recentCasesQuery = supabase
     .from("cases")
     .select(
-      "id, case_code, flow_type, service_area, internal_client_code, external_property_code, external_case_id, external_case_code, bill_to_assigned_client, billing_client_id, status, created_at, clients(name, client_type)"
+      "id, case_code, flow_type, service_area, internal_client_code, external_property_code, external_case_id, external_case_code, bill_to_assigned_client, billing_client_id, status, created_at, clients!cases_client_id_fkey(name, client_type)"
     )
     .order("created_at", { ascending: false })
     .limit(30);

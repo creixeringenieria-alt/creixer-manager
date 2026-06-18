@@ -51,7 +51,7 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
     const caseResp = await supabase
       .from("cases")
       .select(
-        "id, case_code, title, description, status, priority, flow_type, service_area, current_stage, internal_client_code, external_property_code, external_case_id, external_case_code, bill_to_assigned_client, billing_observations, created_at, updated_at, client_id, clients(id, name, client_type)"
+        "id, case_code, title, description, status, priority, flow_type, service_area, current_stage, internal_client_code, external_property_code, external_case_id, external_case_code, bill_to_assigned_client, billing_observations, created_at, updated_at, client_id, clients!cases_client_id_fkey(id, name, client_type)"
       )
       .eq("id", id)
       .maybeSingle();

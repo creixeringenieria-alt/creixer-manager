@@ -76,7 +76,7 @@ export default async function CasosPage({ searchParams }: CasosPageProps) {
   let casesQuery = supabase
     .from("cases")
     .select(
-      "id, case_code, flow_type, service_area, status, current_stage, internal_client_code, external_property_code, external_case_id, external_case_code, client_id, created_at, clients(name)"
+      "id, case_code, flow_type, service_area, status, current_stage, internal_client_code, external_property_code, external_case_id, external_case_code, client_id, created_at, clients!cases_client_id_fkey(name)"
     )
     .order("created_at", { ascending: false })
     .limit(300);

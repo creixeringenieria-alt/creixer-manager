@@ -27,6 +27,7 @@ function dateTimeValue(value: string | null | undefined) {
 export default async function CasoDetallePage({ params, searchParams }: CasoDetallePageProps) {
   const permissionContext = await getCurrentUserPermissions();
   const isClientInmobiliaria = permissionContext.normalizedRole === "cliente_inmobiliaria";
+  const canEditCases = permissionContext.permissions.includes("editar_casos") && !isClientInmobiliaria;
   if (permissionContext.permissions.includes("ver_casos")) {
     await requirePagePermission("ver_casos", "/dashboard", "Acceso denegado para ver el expediente.");
   } else if (permissionContext.permissions.includes("ver_detalle_caso_cliente")) {
@@ -102,6 +103,7 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
           </div>
           <div className="inline-form">
             <Link href="/dashboard/casos">Volver a casos</Link>
+            {canEditCases ? <Link href={`/dashboard/casos/${caseData.id}/editar`}>Editar caso</Link> : null}
             {!isClientInmobiliaria ? <Link href="/dashboard/casos/nuevo">Crear otro caso</Link> : null}
           </div>
         </div>

@@ -60,6 +60,7 @@ function caseLabel(row: CaseRow) {
 export default async function CasosPage({ searchParams }: CasosPageProps) {
   const permissionContext = await getCurrentUserPermissions();
   const isClientInmobiliaria = permissionContext.normalizedRole === "cliente_inmobiliaria";
+  const canEditCases = permissionContext.permissions.includes("editar_casos") && !isClientInmobiliaria;
   const missingClientAssociation = isClientInmobiliaria && !permissionContext.clientId;
 
   if (permissionContext.permissions.includes("ver_casos")) {
@@ -223,7 +224,10 @@ export default async function CasosPage({ searchParams }: CasosPageProps) {
                   {!isClientInmobiliaria ? <td>0</td> : null}
                   {!isClientInmobiliaria ? <td>0</td> : null}
                   <td>
-                    <Link href={`/dashboard/casos/${row.id}`}>Abrir vista única</Link>
+                    <div className="inline-form">
+                      <Link href={`/dashboard/casos/${row.id}`}>Abrir vista única</Link>
+                      {canEditCases ? <Link href={`/dashboard/casos/${row.id}/editar`}>Editar</Link> : null}
+                    </div>
                   </td>
                 </tr>
               ))}

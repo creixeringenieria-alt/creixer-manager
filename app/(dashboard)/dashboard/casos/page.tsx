@@ -60,7 +60,7 @@ function caseLabel(row: CaseRow) {
 export default async function CasosPage({ searchParams }: CasosPageProps) {
   const permissionContext = await getCurrentUserPermissions();
   const isClientInmobiliaria = permissionContext.normalizedRole === "cliente_inmobiliaria";
-  const canEditCases = permissionContext.permissions.includes("editar_casos") && !isClientInmobiliaria;
+  const canEditCases = !isClientInmobiliaria;
   const missingClientAssociation = isClientInmobiliaria && !permissionContext.clientId;
 
   if (permissionContext.permissions.includes("ver_casos")) {

@@ -18,6 +18,12 @@ interface ClientRow {
   documentary_prefix?: string | null;
 }
 
+interface InternalUserRow {
+  id: string;
+  full_name?: string | null;
+  role?: string | null;
+}
+
 interface CaseRow {
   id: string;
   case_code?: string | null;
@@ -56,15 +62,24 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
     );
   }
 
-  const [clientsResp, recentCasesResp] = await Promise.allSettled([
+  const [clientsResp, recentCasesResp, internalUsersResp] = await Promise.allSettled([
     supabase.from("clients").select("id, name, client_type, tax_id, documentary_prefix").eq("is_active", true).order("name"),
-    recentCasesQuery
+    recentCasesQuery,
+    supabase
+      .from("profiles")
+      .select("id, full_name, role")
+      .eq("is_active", true)
+      .eq("user_type", "colaborador_creixer")
+      .order("full_name")
   ]);
 
   const clientsResult = clientsResp.status === "fulfilled" ? clientsResp.value : { data: [], error: clientsResp.reason };
   const recentCasesResult = recentCasesResp.status === "fulfilled" ? recentCasesResp.value : { data: [], error: recentCasesResp.reason };
+  const internalUsersResult =
+    internalUsersResp.status === "fulfilled" ? internalUsersResp.value : { data: [], error: internalUsersResp.reason };
   const clients = ((clientsResult.data ?? []) as ClientRow[]) || [];
   const recentCases = ((recentCasesResult.data ?? []) as CaseRow[]) || [];
+  const internalUsers = ((internalUsersResult.data ?? []) as InternalUserRow[]) || [];
   const creationToken = randomUUID();
 
   if (clientsResult.error) {
@@ -73,6 +88,9 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
   } else if (recentCasesResult.error) {
     console.error("[/dashboard/casos/nuevo] recent cases query failed", recentCasesResult.error);
     loadError = "No fue posible cargar últimos casos, pero puedes crear un caso nuevo.";
+  } else if (internalUsersResult.error) {
+    console.error("[/dashboard/casos/nuevo] internal users query failed", internalUsersResult.error);
+    loadError = "No fue posible cargar responsables internos. Puedes crear el caso pendiente por asignar.";
   }
 
   return (
@@ -163,6 +181,19 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
               <option value="media">media</option>
               <option value="alta">alta</option>
               <option value="critica">critica</option>
+            </select>
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="case-assigned-to-user-id">Asignado a</label>
+            <select id="case-assigned-to-user-id" name="assigned_to_user_id" defaultValue="">
+              <option value="">Pendiente por asignar</option>
+              {internalUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.full_name ?? "Usuario interno"}
+                  {user.role ? ` — ${user.role}` : ""}
+                </option>
+              ))}
             </select>
           </div>
 

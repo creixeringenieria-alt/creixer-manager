@@ -77,6 +77,7 @@ export async function editarCasoAction(formData: FormData) {
   }
 
   const priority = textValue(formData, "priority") ?? "media";
+  const assignedToUserId = textValue(formData, "assigned_to_user_id");
   const internalClientCode = textValue(formData, "internal_client_code");
   const externalPropertyCode = textValue(formData, "external_property_code");
   const externalCaseId = textValue(formData, "external_case_id");
@@ -102,6 +103,7 @@ export async function editarCasoAction(formData: FormData) {
     external_property_code: externalPropertyCode,
     external_case_id: externalCaseId,
     external_case_code: externalCaseCode,
+    assigned_to_user_id: assignedToUserId,
     current_stage: currentStage,
     bill_to_assigned_client: billToAssignedClient,
     billing_client_id: billToAssignedClient ? clientId : billingClientIdInput ?? clientId,
@@ -131,4 +133,25 @@ export async function editarCasoAction(formData: FormData) {
   }
 
   return fail(caseId, lastError ?? "No se pudo actualizar el caso.");
+}
+
+export async function eliminarCasoAction(formData: FormData) {
+  await requireActionPermission("editar_casos", "/dashboard/casos", "Acceso denegado para eliminar casos.");
+
+  const caseId = textValue(formData, "case_id");
+  if (!caseId) {
+    return fail(null, "No se recibió el ID del caso.");
+  }
+
+  const supabase = createAdminClient() as any;
+  const response = await supabase.from("cases").delete().eq("id", caseId);
+
+  if (response.error) {
+    console.error("[/dashboard/casos/[id]/editar] delete case failed", { caseId, error: response.error.message });
+    return fail(caseId, `No se pudo eliminar el caso: ${response.error.message}`);
+  }
+
+  revalidatePath("/dashboard/casos");
+  revalidatePath("/dashboard/casos/nuevo");
+  redirect(`/dashboard/casos?ok=${encodeURIComponent("Caso eliminado correctamente.")}`);
 }

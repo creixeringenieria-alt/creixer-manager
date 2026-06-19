@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-import { editarCasoAction } from "./actions";
+import { editarCasoAction, eliminarCasoAction } from "./actions";
 
 interface EditarCasoPageProps {
   params: Promise<{ id: string }>;
@@ -16,6 +16,12 @@ type ClientRow = {
   client_type?: string | null;
   tax_id?: string | null;
   documentary_prefix?: string | null;
+};
+
+type InternalUserRow = {
+  id: string;
+  full_name?: string | null;
+  role?: string | null;
 };
 
 type CaseData = {
@@ -33,6 +39,7 @@ type CaseData = {
   external_property_code?: string | null;
   external_case_id?: string | null;
   external_case_code?: string | null;
+  assigned_to_user_id?: string | null;
   bill_to_assigned_client?: boolean | null;
   billing_client_id?: string | null;
   billing_observations?: string | null;
@@ -45,15 +52,30 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
   const query = await searchParams;
   const supabase = createAdminClient() as any;
 
-  const [caseResp, clientsResp] = await Promise.all([
+  const caseSelectBase =
+    "id, case_code, client_id, title, description, status, priority, flow_type, service_area, current_stage, internal_client_code, external_property_code, external_case_id, external_case_code, bill_to_assigned_client, billing_client_id, billing_observations";
+  let caseResp = await supabase
+    .from("cases")
+    .select(`${caseSelectBase}, assigned_to_user_id`)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (caseResp.error?.message?.includes("assigned_to_user_id")) {
+    console.error("[/dashboard/casos/[id]/editar] assigned_to_user_id column unavailable, retrying without it", {
+      id,
+      error: caseResp.error.message
+    });
+    caseResp = await supabase.from("cases").select(caseSelectBase).eq("id", id).maybeSingle();
+  }
+
+  const [clientsResp, internalUsersResp] = await Promise.all([
+    supabase.from("clients").select("id, name, client_type, tax_id, documentary_prefix").eq("is_active", true).order("name"),
     supabase
-      .from("cases")
-      .select(
-        "id, case_code, client_id, title, description, status, priority, flow_type, service_area, current_stage, internal_client_code, external_property_code, external_case_id, external_case_code, bill_to_assigned_client, billing_client_id, billing_observations"
-      )
-      .eq("id", id)
-      .maybeSingle(),
-    supabase.from("clients").select("id, name, client_type, tax_id, documentary_prefix").eq("is_active", true).order("name")
+      .from("profiles")
+      .select("id, full_name, role")
+      .eq("is_active", true)
+      .eq("user_type", "colaborador_creixer")
+      .order("full_name")
   ]);
 
   if (caseResp.error) {
@@ -62,9 +84,13 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
   if (clientsResp.error) {
     console.error("[/dashboard/casos/[id]/editar] clients query failed", { error: clientsResp.error.message });
   }
+  if (internalUsersResp.error) {
+    console.error("[/dashboard/casos/[id]/editar] internal users query failed", { error: internalUsersResp.error.message });
+  }
 
   const caseData = caseResp.data as CaseData | null;
   const clients = ((clientsResp.data ?? []) as ClientRow[]) || [];
+  const internalUsers = ((internalUsersResp.data ?? []) as InternalUserRow[]) || [];
 
   if (!caseData) {
     return (
@@ -94,6 +120,9 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
       {query.error ? <p className="feedback error">{query.error}</p> : null}
       {query.ok ? <p className="feedback success">{query.ok}</p> : null}
       {clientsResp.error ? <p className="feedback error">No fue posible cargar clientes: {clientsResp.error.message}</p> : null}
+      {internalUsersResp.error ? (
+        <p className="feedback error">No fue posible cargar responsables internos: {internalUsersResp.error.message}</p>
+      ) : null}
 
       <section className="card">
         <h2>Datos editables del caso</h2>
@@ -169,6 +198,19 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
           </div>
 
           <div className="form-field">
+            <label htmlFor="case-assigned-to-user-id">Asignado a</label>
+            <select id="case-assigned-to-user-id" name="assigned_to_user_id" defaultValue={caseData.assigned_to_user_id ?? ""}>
+              <option value="">Pendiente por asignar</option>
+              {internalUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.full_name ?? "Usuario interno"}
+                  {user.role ? ` — ${user.role}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-field">
             <label htmlFor="case-status">Estado del caso</label>
             <select id="case-status" name="status" required defaultValue={caseData.status ?? "creado"}>
               <option value="creado">creado</option>
@@ -230,6 +272,19 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
           </div>
 
           <button type="submit">Guardar cambios del caso</button>
+        </form>
+      </section>
+
+      <section className="card" style={{ borderColor: "#fecaca" }}>
+        <h2>Eliminar caso</h2>
+        <p className="feedback error" style={{ marginBottom: "1rem" }}>
+          Esta acción elimina el caso operativo. Úsala solo si el caso fue creado por error.
+        </p>
+        <form action={eliminarCasoAction}>
+          <input type="hidden" name="case_id" value={caseData.id} />
+          <button type="submit" style={{ background: "#991b1b" }}>
+            Eliminar caso
+          </button>
         </form>
       </section>
     </main>

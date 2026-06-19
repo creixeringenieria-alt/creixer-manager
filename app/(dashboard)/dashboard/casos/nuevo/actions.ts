@@ -181,6 +181,7 @@ export async function crearCasoAction(formData: FormData) {
   const externalCaseCode = textValue(formData, "external_case_code");
   const description = textValue(formData, "description");
   const priority = textValue(formData, "priority") ?? "media";
+  const assignedToUserId = textValue(formData, "assigned_to_user_id");
   const billToAssignedClient = (textValue(formData, "bill_to_assigned_client") ?? "si") === "si";
   const billingClientIdInput = textValue(formData, "billing_client_id");
   const billingObservations = textValue(formData, "billing_observations");
@@ -213,6 +214,7 @@ export async function crearCasoAction(formData: FormData) {
     external_property_code: externalPropertyCode,
     external_case_id: externalCaseId,
     external_case_code: externalCaseCode,
+    assigned_to_user_id: assignedToUserId,
     start_with_visit: true,
     current_stage: "en_visita",
     estimated_delivery_date: null,

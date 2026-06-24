@@ -7,6 +7,9 @@ import { requireActionPermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
+const MAX_CASE_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024;
+const MAX_CASE_ATTACHMENT_SIZE_MB = MAX_CASE_ATTACHMENT_SIZE_BYTES / 1024 / 1024;
+
 function textValue(formData: FormData, key: string) {
   const value = formData.get(key);
   if (typeof value !== "string") return null;
@@ -38,6 +41,12 @@ function getMissingColumnFromErrorMessage(message: string | undefined) {
 
 function sanitizeFilename(filename: string) {
   return filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function validateCaseAttachment(file: File) {
+  if (file.size > MAX_CASE_ATTACHMENT_SIZE_BYTES) {
+    throw new Error(`El archivo "${file.name}" supera ${MAX_CASE_ATTACHMENT_SIZE_MB} MB. Reduce el tamaño o sube un archivo más liviano.`);
+  }
 }
 
 function normalizeCaseDocumentType(value: string | null) {
@@ -73,6 +82,7 @@ async function guardarDocumentosCaso(caseId: string, formData: FormData, uploade
 
   for (const fileEntry of files) {
     if (!(fileEntry instanceof File) || fileEntry.size === 0) continue;
+    validateCaseAttachment(fileEntry);
 
     const filename = sanitizeFilename(fileEntry.name || "documento");
     const storagePath = `cases/${caseId}/${Date.now()}-${filename}`;

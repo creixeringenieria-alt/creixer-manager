@@ -6,6 +6,9 @@ import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+const MAX_CASE_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024;
+const MAX_CASE_ATTACHMENT_SIZE_MB = MAX_CASE_ATTACHMENT_SIZE_BYTES / 1024 / 1024;
+
 function textValue(formData: FormData, key: string) {
   const value = formData.get(key);
   if (typeof value !== "string") return null;
@@ -31,6 +34,12 @@ function getMissingColumnFromErrorMessage(message: string | undefined) {
 
 function sanitizeFilename(filename: string) {
   return filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function validateCaseAttachment(file: File) {
+  if (file.size > MAX_CASE_ATTACHMENT_SIZE_BYTES) {
+    throw new Error(`El archivo "${file.name}" supera ${MAX_CASE_ATTACHMENT_SIZE_MB} MB. Reduce el tamaño o sube un archivo más liviano.`);
+  }
 }
 
 function normalizeCaseDocumentType(value: string | null) {
@@ -75,7 +84,7 @@ async function uploadToEvidenceBucket(supabase: any, storagePath: string, file: 
 
   const created = await supabase.storage.createBucket("evidences", {
     public: true,
-    fileSizeLimit: 10485760
+    fileSizeLimit: MAX_CASE_ATTACHMENT_SIZE_BYTES
   });
 
   if (created.error && !String(created.error.message ?? "").toLowerCase().includes("already")) {
@@ -231,6 +240,7 @@ export async function adjuntarDocumentosCasoAction(formData: FormData) {
 
   try {
     for (const file of validFiles) {
+      validateCaseAttachment(file);
       const filename = sanitizeFilename(file.name || "documento");
       const storagePath = `cases/${caseId}/${Date.now()}-${filename}`;
 

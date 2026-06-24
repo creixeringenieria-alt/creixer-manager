@@ -307,6 +307,7 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
               multiple
               accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
             />
+            <small>Máximo 20 MB por archivo. Si son muchas fotos, súbelas en grupos pequeños.</small>
           </div>
 
           <button type="submit">Adjuntar soportes</button>

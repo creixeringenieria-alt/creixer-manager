@@ -283,12 +283,12 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
 
           <div className="form-field">
             <label htmlFor="case-document-type">Tipo de soporte</label>
-            <select id="case-document-type" name="case_document_type" defaultValue="evidencia_fotografica">
-              <option value="evidencia_fotografica">Evidencia fotográfica</option>
+            <select id="case-document-type" name="case_document_type" defaultValue="archivo_tecnico">
+              <option value="archivo_tecnico">Evidencia fotográfica / soporte técnico</option>
               <option value="documento_cliente">Documento del cliente</option>
-              <option value="soporte_tecnico">Soporte técnico</option>
-              <option value="plano">Plano</option>
-              <option value="cotizacion_recibida">Cotización recibida</option>
+              <option value="planos">Plano</option>
+              <option value="presupuesto">Cotización / presupuesto recibido</option>
+              <option value="anexos">Anexo</option>
               <option value="otro">Otro</option>
             </select>
           </div>

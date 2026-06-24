@@ -40,12 +40,35 @@ function sanitizeFilename(filename: string) {
   return filename.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
+function normalizeCaseDocumentType(value: string | null) {
+  const allowed = [
+    "convocatoria",
+    "terminos_referencia",
+    "anexos",
+    "planos",
+    "documento_cliente",
+    "archivo_tecnico",
+    "presupuesto",
+    "contrato",
+    "pliegos",
+    "cronograma_contractual",
+    "especificaciones",
+    "polizas",
+    "licencias",
+    "evidencia_fotografica",
+    "soporte_tecnico",
+    "cotizacion_recibida",
+    "otro"
+  ];
+  return value && allowed.includes(value) ? value : "otro";
+}
+
 async function guardarDocumentosCaso(caseId: string, formData: FormData, uploadedBy: string | null) {
   const files = formData.getAll("case_files");
   if (!files.length) return;
 
   const supabase = createAdminClient() as any;
-  const documentType = textValue(formData, "case_document_type") ?? "otro";
+  const documentType = normalizeCaseDocumentType(textValue(formData, "case_document_type"));
   const customName = textValue(formData, "case_document_name");
 
   for (const fileEntry of files) {

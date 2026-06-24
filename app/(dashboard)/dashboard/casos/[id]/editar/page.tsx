@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-import { editarCasoAction, eliminarCasoAction } from "./actions";
+import { adjuntarDocumentosCasoAction, editarCasoAction, eliminarCasoAction } from "./actions";
 
 interface EditarCasoPageProps {
   params: Promise<{ id: string }>;
@@ -275,14 +275,52 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
         </form>
       </section>
 
+      <section className="card">
+        <h2>Adjuntar documentos o fotos</h2>
+        <p>Sube evidencias, fotos, documentos del cliente o soportes técnicos asociados a este caso.</p>
+        <form action={adjuntarDocumentosCasoAction} className="form-grid">
+          <input type="hidden" name="case_id" value={caseData.id} />
+
+          <div className="form-field">
+            <label htmlFor="case-document-type">Tipo de soporte</label>
+            <select id="case-document-type" name="case_document_type" defaultValue="evidencia_fotografica">
+              <option value="evidencia_fotografica">Evidencia fotográfica</option>
+              <option value="documento_cliente">Documento del cliente</option>
+              <option value="soporte_tecnico">Soporte técnico</option>
+              <option value="plano">Plano</option>
+              <option value="cotizacion_recibida">Cotización recibida</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="case-document-name">Nombre visible del soporte (opcional)</label>
+            <input id="case-document-name" name="case_document_name" placeholder="Ej: Fotos visita inicial" />
+          </div>
+
+          <div className="form-field" style={{ gridColumn: "1 / -1" }}>
+            <label htmlFor="case-files">Archivos o fotos</label>
+            <input
+              id="case-files"
+              name="case_files"
+              type="file"
+              multiple
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+            />
+          </div>
+
+          <button type="submit">Adjuntar soportes</button>
+        </form>
+      </section>
+
       <section className="card" style={{ borderColor: "#fecaca" }}>
         <h2>Eliminar caso</h2>
         <p className="feedback error" style={{ marginBottom: "1rem" }}>
           Esta acción elimina el caso operativo. Úsala solo si el caso fue creado por error.
         </p>
-        <form action={eliminarCasoAction}>
+        <form action={eliminarCasoAction} className="form-grid">
           <input type="hidden" name="case_id" value={caseData.id} />
-          <button type="submit" style={{ background: "#991b1b" }}>
+          <button type="submit" style={{ background: "#991b1b", borderColor: "#991b1b" }}>
             Eliminar caso
           </button>
         </form>

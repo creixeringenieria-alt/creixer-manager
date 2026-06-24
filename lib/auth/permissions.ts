@@ -15,6 +15,10 @@ export const APP_PERMISSIONS = [
   "crear_casos",
   "editar_casos",
   "cerrar_casos",
+  "ver_clientes",
+  "crear_clientes",
+  "editar_clientes",
+  "eliminar_clientes",
   "ver_finanzas",
   "registrar_gastos",
   "adjuntar_soportes",
@@ -34,10 +38,36 @@ const ROLE_PERMISSIONS_FALLBACK: Record<AppRole, AppPermission[]> = {
     "ver_finanzas",
     "adjuntar_soportes",
     "asignar_tecnicos",
-    "ver_inventario"
+    "ver_inventario",
+    "ver_clientes",
+    "crear_clientes",
+    "editar_clientes",
+    "eliminar_clientes"
   ],
-  administrativo: ["ver_casos", "crear_casos", "editar_casos", "adjuntar_soportes", "asignar_tecnicos"],
-  contable: ["ver_casos", "ver_finanzas", "registrar_gastos", "adjuntar_soportes"],
+  administrativo: [
+    "ver_casos",
+    "crear_casos",
+    "editar_casos",
+    "adjuntar_soportes",
+    "asignar_tecnicos",
+    "ver_clientes",
+    "crear_clientes",
+    "editar_clientes",
+    "eliminar_clientes"
+  ],
+  contable: [
+    "ver_casos",
+    "crear_casos",
+    "editar_casos",
+    "cerrar_casos",
+    "ver_finanzas",
+    "registrar_gastos",
+    "adjuntar_soportes",
+    "ver_clientes",
+    "crear_clientes",
+    "editar_clientes",
+    "eliminar_clientes"
+  ],
   almacen: ["ver_casos", "ver_inventario", "adjuntar_soportes"],
   lider_operativo: ["ver_casos", "crear_casos", "editar_casos", "cerrar_casos", "asignar_tecnicos"],
   tecnico: ["ver_casos_propios", "adjuntar_soportes"],
@@ -45,8 +75,30 @@ const ROLE_PERMISSIONS_FALLBACK: Record<AppRole, AppPermission[]> = {
 
   // Legacy mapped.
   administrador: [...APP_PERMISSIONS],
-  asistente: ["ver_casos", "crear_casos", "editar_casos", "adjuntar_soportes", "asignar_tecnicos"],
-  contabilidad: ["ver_casos", "ver_finanzas", "registrar_gastos", "adjuntar_soportes"],
+  asistente: [
+    "ver_casos",
+    "crear_casos",
+    "editar_casos",
+    "adjuntar_soportes",
+    "asignar_tecnicos",
+    "ver_clientes",
+    "crear_clientes",
+    "editar_clientes",
+    "eliminar_clientes"
+  ],
+  contabilidad: [
+    "ver_casos",
+    "crear_casos",
+    "editar_casos",
+    "cerrar_casos",
+    "ver_finanzas",
+    "registrar_gastos",
+    "adjuntar_soportes",
+    "ver_clientes",
+    "crear_clientes",
+    "editar_clientes",
+    "eliminar_clientes"
+  ],
   cliente: []
 };
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requirePageAccess } from "@/lib/auth/permissions";
+import { requirePagePermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { createClientAction, deleteClientAction, updateClientAction } from "./actions";
@@ -10,7 +10,7 @@ interface ClientsPageProps {
 }
 
 export default async function ClientsPage({ searchParams }: ClientsPageProps) {
-  await requirePageAccess(["administrador"], "/dashboard", "Acceso denegado: solo administrador puede gestionar clientes.");
+  await requirePagePermission("ver_clientes", "/dashboard", "Acceso denegado: tu rol no puede gestionar clientes.");
 
   const params = await searchParams;
   const supabase = createAdminClient();

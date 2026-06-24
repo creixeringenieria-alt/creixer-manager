@@ -59,6 +59,7 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
   { id: "apu", label: "APU", href: "/dashboard/apu", roles: ["super_admin", "gerente_operativo", "administrativo", "lider_operativo"], showInHeader: true, showInDashboard: true },
   { id: "almacen", label: "Almacén", href: "/dashboard/almacen", roles: ["super_admin", "gerente_operativo", "administrativo", "almacen"], showInHeader: true, showInDashboard: true },
   { id: "finanzas", label: "Finanzas", href: "/dashboard/finanzas", roles: ["super_admin", "gerente_operativo", "contable"], showInHeader: true, showInDashboard: true },
+  { id: "clientes", label: "Clientes", href: "/dashboard/clientes", roles: ["super_admin", "gerente_operativo", "administrativo", "contable"], showInHeader: false, showInDashboard: true },
   { id: "inmobiliarias", label: "Inmobiliarias", href: "/dashboard/inmobiliarias", roles: ["super_admin", "gerente_operativo", "administrativo"], showInHeader: true, showInDashboard: true },
   { id: "configuracion", label: "Configuración", href: "/dashboard/configuracion", roles: ["super_admin", "gerente_operativo", "administrativo"], showInHeader: true, showInDashboard: true },
 

@@ -29,6 +29,59 @@ function getMissingColumnFromErrorMessage(message: string | undefined) {
   return match?.[1] ?? null;
 }
 
+function sanitizeFilename(filename: string) {
+  return filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+async function uploadToEvidenceBucket(supabase: any, storagePath: string, file: File) {
+  const uploadOptions = {
+    upsert: false,
+    contentType: file.type || "application/octet-stream"
+  };
+
+  const firstTry = await supabase.storage.from("evidences").upload(storagePath, file, uploadOptions);
+  if (!firstTry.error) {
+    return;
+  }
+
+  const message = String(firstTry.error.message ?? "");
+  const bucketMissing = message.toLowerCase().includes("bucket") && message.toLowerCase().includes("not");
+  if (!bucketMissing) {
+    throw new Error(`Error subiendo archivo del caso: ${firstTry.error.message}`);
+  }
+
+  const created = await supabase.storage.createBucket("evidences", {
+    public: true,
+    fileSizeLimit: 10485760
+  });
+
+  if (created.error && !String(created.error.message ?? "").toLowerCase().includes("already")) {
+    throw new Error(`No se pudo preparar el bucket de evidencias: ${created.error.message}`);
+  }
+
+  const secondTry = await supabase.storage.from("evidences").upload(storagePath, file, uploadOptions);
+  if (secondTry.error) {
+    throw new Error(`Error subiendo archivo del caso: ${secondTry.error.message}`);
+  }
+}
+
+async function insertCaseDocument(supabase: any, payload: Record<string, unknown>) {
+  for (let i = 0; i < 5; i += 1) {
+    const response = await supabase.from("case_documents").insert(payload);
+    if (!response.error) {
+      return;
+    }
+
+    const missingColumn = getMissingColumnFromErrorMessage(response.error.message);
+    if (missingColumn && missingColumn in payload) {
+      delete payload[missingColumn];
+      continue;
+    }
+
+    throw new Error(`Error registrando archivo del caso: ${response.error.message}`);
+  }
+}
+
 export async function editarCasoAction(formData: FormData) {
   await requireActionPermission("editar_casos", "/dashboard/casos", "Acceso denegado para editar casos.");
 
@@ -133,6 +186,56 @@ export async function editarCasoAction(formData: FormData) {
   }
 
   return fail(caseId, lastError ?? "No se pudo actualizar el caso.");
+}
+
+export async function adjuntarDocumentosCasoAction(formData: FormData) {
+  const ctx = await requireActionPermission("adjuntar_soportes", "/dashboard/casos", "Acceso denegado para adjuntar soportes.");
+
+  const caseId = textValue(formData, "case_id");
+  if (!caseId) {
+    return fail(null, "No se recibió el ID del caso.");
+  }
+
+  const files = formData.getAll("case_files");
+  const validFiles = files.filter((file): file is File => file instanceof File && file.size > 0);
+  if (validFiles.length === 0) {
+    return fail(caseId, "Selecciona al menos un archivo o foto para adjuntar.");
+  }
+
+  const supabase = createAdminClient() as any;
+  const documentType = textValue(formData, "case_document_type") ?? "otro";
+  const customName = textValue(formData, "case_document_name");
+
+  try {
+    for (const file of validFiles) {
+      const filename = sanitizeFilename(file.name || "documento");
+      const storagePath = `cases/${caseId}/${Date.now()}-${filename}`;
+
+      await uploadToEvidenceBucket(supabase, storagePath, file);
+
+      const publicUrl = supabase.storage.from("evidences").getPublicUrl(storagePath).data.publicUrl;
+      await insertCaseDocument(supabase, {
+        case_id: caseId,
+        document_type: documentType,
+        name: customName ?? filename,
+        original_filename: filename,
+        storage_path: storagePath,
+        file_url: publicUrl,
+        mime_type: file.type || null,
+        size_bytes: file.size,
+        uploaded_by: ctx.userId
+      });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se pudieron adjuntar los archivos.";
+    console.error("[/dashboard/casos/[id]/editar] upload documents failed", { caseId, error: message });
+    return fail(caseId, message);
+  }
+
+  revalidatePath("/dashboard/casos");
+  revalidatePath(`/dashboard/casos/${caseId}`);
+  revalidatePath(`/dashboard/casos/${caseId}/editar`);
+  redirect(`/dashboard/casos/${caseId}/editar?ok=${encodeURIComponent("Soporte adjuntado correctamente.")}`);
 }
 
 export async function eliminarCasoAction(formData: FormData) {

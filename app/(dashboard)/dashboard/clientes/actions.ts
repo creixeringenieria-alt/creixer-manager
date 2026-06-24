@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { requireActionAccess } from "@/lib/auth/permissions";
+import { requireActionPermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function cleanValue(value: FormDataEntryValue | null) {
@@ -52,7 +52,7 @@ function okRedirect(message: string) {
 }
 
 export async function createClientAction(formData: FormData) {
-  await requireActionAccess(["administrador"], "/dashboard", "Acceso denegado: tu rol no puede crear clientes.");
+  await requireActionPermission("crear_clientes", "/dashboard/clientes", "Acceso denegado: tu rol no puede crear clientes.");
 
   try {
     const name = cleanValue(formData.get("name"));
@@ -86,7 +86,7 @@ export async function createClientAction(formData: FormData) {
 }
 
 export async function updateClientAction(formData: FormData) {
-  await requireActionAccess(["administrador"], "/dashboard", "Acceso denegado: tu rol no puede editar clientes.");
+  await requireActionPermission("editar_clientes", "/dashboard/clientes", "Acceso denegado: tu rol no puede editar clientes.");
 
   try {
     const id = cleanValue(formData.get("id"));
@@ -124,7 +124,7 @@ export async function updateClientAction(formData: FormData) {
 }
 
 export async function deleteClientAction(formData: FormData) {
-  await requireActionAccess(["administrador"], "/dashboard", "Acceso denegado: tu rol no puede eliminar clientes.");
+  await requireActionPermission("eliminar_clientes", "/dashboard/clientes", "Acceso denegado: tu rol no puede eliminar clientes.");
 
   const id = cleanValue(formData.get("id"));
 

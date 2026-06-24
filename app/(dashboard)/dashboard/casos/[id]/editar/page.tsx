@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-import { adjuntarDocumentosCasoAction, editarCasoAction, eliminarCasoAction } from "./actions";
+import { adjuntarDocumentosCasoAction, editarCasoAction, eliminarCasoAction, eliminarDocumentoCasoAction } from "./actions";
 
 interface EditarCasoPageProps {
   params: Promise<{ id: string }>;
@@ -45,6 +45,18 @@ type CaseData = {
   billing_observations?: string | null;
 };
 
+type CaseDocumentRow = {
+  id: string;
+  document_type?: string | null;
+  name?: string | null;
+  original_filename?: string | null;
+  created_at?: string | null;
+};
+
+function dateTimeValue(value: string | null | undefined) {
+  return value ? new Date(value).toLocaleString("es-CO") : "-";
+}
+
 export default async function EditarCasoPage({ params, searchParams }: EditarCasoPageProps) {
   await requirePagePermission("editar_casos", "/dashboard/casos", "Acceso denegado para editar casos.");
 
@@ -68,14 +80,19 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
     caseResp = await supabase.from("cases").select(caseSelectBase).eq("id", id).maybeSingle();
   }
 
-  const [clientsResp, internalUsersResp] = await Promise.all([
+  const [clientsResp, internalUsersResp, docsResp] = await Promise.all([
     supabase.from("clients").select("id, name, client_type, tax_id, documentary_prefix").eq("is_active", true).order("name"),
     supabase
       .from("profiles")
       .select("id, full_name, role")
       .eq("is_active", true)
       .eq("user_type", "colaborador_creixer")
-      .order("full_name")
+      .order("full_name"),
+    supabase
+      .from("case_documents")
+      .select("id, document_type, name, original_filename, created_at")
+      .eq("case_id", id)
+      .order("created_at", { ascending: false })
   ]);
 
   if (caseResp.error) {
@@ -87,10 +104,14 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
   if (internalUsersResp.error) {
     console.error("[/dashboard/casos/[id]/editar] internal users query failed", { error: internalUsersResp.error.message });
   }
+  if (docsResp.error) {
+    console.error("[/dashboard/casos/[id]/editar] documents query failed", { id, error: docsResp.error.message });
+  }
 
   const caseData = caseResp.data as CaseData | null;
   const clients = ((clientsResp.data ?? []) as ClientRow[]) || [];
   const internalUsers = ((internalUsersResp.data ?? []) as InternalUserRow[]) || [];
+  const docs = ((docsResp.data ?? []) as CaseDocumentRow[]) || [];
 
   if (!caseData) {
     return (
@@ -123,6 +144,7 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
       {internalUsersResp.error ? (
         <p className="feedback error">No fue posible cargar responsables internos: {internalUsersResp.error.message}</p>
       ) : null}
+      {docsResp.error ? <p className="feedback error">No fue posible cargar adjuntos: {docsResp.error.message}</p> : null}
 
       <section className="card">
         <h2>Datos editables del caso</h2>
@@ -312,6 +334,47 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
 
           <button type="submit">Adjuntar soportes</button>
         </form>
+
+        <h3>Adjuntos actuales</h3>
+        {docs.length === 0 ? <p>No hay adjuntos registrados en este caso.</p> : null}
+        {docs.length > 0 ? (
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Tipo</th>
+                  <th>Nombre</th>
+                  <th>Archivo</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {docs.map((doc) => (
+                  <tr key={doc.id}>
+                    <td>{dateTimeValue(doc.created_at)}</td>
+                    <td>{doc.document_type ?? "-"}</td>
+                    <td>{doc.name ?? "-"}</td>
+                    <td>
+                      <a href={`/api/case-documents/${doc.id}`} target="_blank" rel="noreferrer">
+                        {doc.original_filename ?? "Ver / descargar"}
+                      </a>
+                    </td>
+                    <td>
+                      <form action={eliminarDocumentoCasoAction}>
+                        <input type="hidden" name="case_id" value={caseData.id} />
+                        <input type="hidden" name="document_id" value={doc.id} />
+                        <button type="submit" style={{ background: "#991b1b", borderColor: "#991b1b" }}>
+                          Eliminar adjunto
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </section>
 
       <section className="card" style={{ borderColor: "#fecaca" }}>

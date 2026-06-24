@@ -271,6 +271,69 @@ export async function adjuntarDocumentosCasoAction(formData: FormData) {
   redirect(`/dashboard/casos/${caseId}/editar?ok=${encodeURIComponent("Soporte adjuntado correctamente.")}`);
 }
 
+export async function eliminarDocumentoCasoAction(formData: FormData) {
+  await requireActionPermission("editar_casos", "/dashboard/casos", "Acceso denegado para eliminar adjuntos.");
+
+  const caseId = textValue(formData, "case_id");
+  const documentId = textValue(formData, "document_id");
+
+  if (!caseId) {
+    return fail(null, "No se recibió el ID del caso.");
+  }
+
+  if (!documentId) {
+    return fail(caseId, "No se recibió el ID del adjunto.");
+  }
+
+  const supabase = createAdminClient() as any;
+  const { data: documentRow, error: documentError } = await supabase
+    .from("case_documents")
+    .select("id, storage_path")
+    .eq("id", documentId)
+    .eq("case_id", caseId)
+    .maybeSingle();
+
+  if (documentError) {
+    console.error("[/dashboard/casos/[id]/editar] document query before delete failed", {
+      caseId,
+      documentId,
+      error: documentError.message
+    });
+    return fail(caseId, `No se pudo consultar el adjunto: ${documentError.message}`);
+  }
+
+  if (!documentRow) {
+    return fail(caseId, "No se encontró el adjunto para eliminar.");
+  }
+
+  if (documentRow.storage_path) {
+    const removedStorage = await supabase.storage.from("evidences").remove([documentRow.storage_path]);
+    if (removedStorage.error) {
+      console.warn("[/dashboard/casos/[id]/editar] storage remove failed, continuing with record delete", {
+        caseId,
+        documentId,
+        storagePath: documentRow.storage_path,
+        error: removedStorage.error.message
+      });
+    }
+  }
+
+  const deleted = await supabase.from("case_documents").delete().eq("id", documentId).eq("case_id", caseId);
+  if (deleted.error) {
+    console.error("[/dashboard/casos/[id]/editar] document delete failed", {
+      caseId,
+      documentId,
+      error: deleted.error.message
+    });
+    return fail(caseId, `No se pudo eliminar el adjunto: ${deleted.error.message}`);
+  }
+
+  revalidatePath("/dashboard/casos");
+  revalidatePath(`/dashboard/casos/${caseId}`);
+  revalidatePath(`/dashboard/casos/${caseId}/editar`);
+  redirect(`/dashboard/casos/${caseId}/editar?ok=${encodeURIComponent("Adjunto eliminado correctamente.")}`);
+}
+
 export async function eliminarCasoAction(formData: FormData) {
   await requireActionPermission("editar_casos", "/dashboard/casos", "Acceso denegado para eliminar casos.");
 

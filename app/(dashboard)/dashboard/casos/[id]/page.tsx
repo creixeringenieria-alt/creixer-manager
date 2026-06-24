@@ -83,7 +83,7 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
 
     const docsResp = await supabase
       .from("case_documents")
-      .select("id, document_type, name, original_filename, file_url, created_at")
+      .select("id, document_type, name, original_filename, created_at")
       .eq("case_id", id)
       .order("created_at", { ascending: false });
 
@@ -159,7 +159,11 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
                       <td>{dateTimeValue(doc.created_at)}</td>
                       <td>{doc.document_type}</td>
                       <td>{doc.name}</td>
-                      <td>{doc.file_url ? <a href={doc.file_url}>{doc.original_filename}</a> : doc.original_filename}</td>
+                      <td>
+                        <a href={`/api/case-documents/${doc.id}`} target="_blank" rel="noreferrer">
+                          {doc.original_filename ?? "Ver / descargar"}
+                        </a>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

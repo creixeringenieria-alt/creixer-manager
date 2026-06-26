@@ -230,14 +230,13 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
 
           <div className="form-field">
             <label htmlFor="case-document-type">Tipo de documento inicial</label>
-            <select id="case-document-type" name="case_document_type" defaultValue="archivo_tecnico">
-              <option value="convocatoria">convocatoria</option>
-              <option value="terminos_referencia">terminos_referencia</option>
-              <option value="anexos">anexos</option>
-              <option value="planos">planos</option>
-              <option value="documento_cliente">documento_cliente</option>
-              <option value="archivo_tecnico">archivo_tecnico</option>
-              <option value="otro">otro</option>
+            <select id="case-document-type" name="case_document_type" defaultValue="informe_visita">
+              <option value="factura">Factura</option>
+              <option value="informe_final">Informe final</option>
+              <option value="informe_visita">Informe de visita</option>
+              <option value="cotizacion">Cotización</option>
+              <option value="acta_satisfaccion">Acta de satisfacción</option>
+              <option value="otro">Otros (máximo 3 archivos)</option>
             </select>
           </div>
 
@@ -260,7 +259,7 @@ export default async function NuevoCasoProyectoPage({ searchParams }: NuevoCasoP
           <div className="span-2" style={{ fontSize: "0.9rem", color: "#475569" }}>
             Al guardar, el sistema asigna consecutivo automáticamente (ejemplo: <strong>CAS-000001</strong>). Si no escribes
             ID externo, el sistema usará ese consecutivo como referencia inicial. La fecha estimada de entrega se definirá
-            después de aprobación cuando aplique.
+            después de aprobación cuando aplique. Máximo 20 MB por archivo; en Otros puedes adjuntar hasta 3 archivos.
           </div>
 
           <button type="submit">Crear caso con consecutivo</button>

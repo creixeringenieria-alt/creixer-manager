@@ -8,6 +8,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const MAX_CASE_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024;
 const MAX_CASE_ATTACHMENT_SIZE_MB = MAX_CASE_ATTACHMENT_SIZE_BYTES / 1024 / 1024;
+const CASE_DOCUMENT_TYPES = [
+  "factura",
+  "informe_final",
+  "informe_visita",
+  "cotizacion",
+  "acta_satisfaccion",
+  "otro"
+];
 
 function textValue(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -43,26 +51,16 @@ function validateCaseAttachment(file: File) {
 }
 
 function normalizeCaseDocumentType(value: string | null) {
-  const allowed = [
-    "convocatoria",
-    "terminos_referencia",
-    "anexos",
-    "planos",
-    "documento_cliente",
-    "archivo_tecnico",
-    "presupuesto",
-    "contrato",
-    "pliegos",
-    "cronograma_contractual",
-    "especificaciones",
-    "polizas",
-    "licencias",
-    "evidencia_fotografica",
-    "soporte_tecnico",
-    "cotizacion_recibida",
-    "otro"
-  ];
-  return value && allowed.includes(value) ? value : "otro";
+  return value && CASE_DOCUMENT_TYPES.includes(value) ? value : "otro";
+}
+
+function getCaseDocumentLimit(documentType: string) {
+  return documentType === "otro" ? 3 : 1;
+}
+
+function getCaseDocumentLimitLabel(documentType: string) {
+  if (documentType === "otro") return "Otros permite máximo 3 archivos por caso.";
+  return "Este tipo de documento permite máximo 1 archivo por caso.";
 }
 
 async function uploadToEvidenceBucket(supabase: any, storagePath: string, file: File) {
@@ -239,6 +237,22 @@ export async function adjuntarDocumentosCasoAction(formData: FormData) {
   const customName = textValue(formData, "case_document_name");
 
   try {
+    const limit = getCaseDocumentLimit(documentType);
+    const existingDocs = await supabase
+      .from("case_documents")
+      .select("id", { count: "exact", head: true })
+      .eq("case_id", caseId)
+      .eq("document_type", documentType);
+
+    if (existingDocs.error) {
+      throw new Error(`No se pudo validar cupos de adjuntos: ${existingDocs.error.message}`);
+    }
+
+    const currentCount = existingDocs.count ?? 0;
+    if (currentCount + validFiles.length > limit) {
+      throw new Error(`${getCaseDocumentLimitLabel(documentType)} Elimina un adjunto anterior si necesitas reemplazarlo.`);
+    }
+
     for (const file of validFiles) {
       validateCaseAttachment(file);
       const filename = sanitizeFilename(file.name || "documento");

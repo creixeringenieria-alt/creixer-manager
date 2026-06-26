@@ -57,6 +57,73 @@ function dateTimeValue(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString("es-CO") : "-";
 }
 
+function documentTypeLabel(value: string | null | undefined) {
+  const labels: Record<string, string> = {
+    factura: "Factura",
+    informe_final: "Informe final",
+    informe_visita: "Informe de visita",
+    cotizacion: "Cotización",
+    acta_satisfaccion: "Acta de satisfacción",
+    otro: "Otros"
+  };
+  return value ? labels[value] ?? value : "-";
+}
+
+function caseDisplayReference(caseData: CaseData) {
+  return [caseData.internal_client_code, caseData.external_property_code, caseData.case_code].filter(Boolean).join(" | ");
+}
+
+const CASE_DOCUMENT_SLOTS = [
+  {
+    type: "factura",
+    title: "Factura",
+    description: "Documento de facturación del servicio.",
+    folder: "Facturación",
+    multiple: false,
+    button: "Cargar factura"
+  },
+  {
+    type: "informe_final",
+    title: "Informe final",
+    description: "Informe final del trabajo realizado.",
+    folder: "Informes",
+    multiple: false,
+    button: "Cargar informe final"
+  },
+  {
+    type: "informe_visita",
+    title: "Informe de visita",
+    description: "Informe técnico inicial o soporte de visita.",
+    folder: "Informes",
+    multiple: false,
+    button: "Cargar informe de visita"
+  },
+  {
+    type: "cotizacion",
+    title: "Cotización",
+    description: "Cotización enviada o aprobada para el caso.",
+    folder: "Facturación",
+    multiple: false,
+    button: "Cargar cotización"
+  },
+  {
+    type: "acta_satisfaccion",
+    title: "Acta de satisfacción",
+    description: "Acta firmada o soporte de satisfacción.",
+    folder: "Satisfacción",
+    multiple: false,
+    button: "Cargar acta"
+  },
+  {
+    type: "otro",
+    title: "Otros",
+    description: "Hasta 3 archivos adicionales del caso.",
+    folder: "Otros",
+    multiple: true,
+    button: "Cargar otros"
+  }
+];
+
 export default async function EditarCasoPage({ params, searchParams }: EditarCasoPageProps) {
   await requirePagePermission("editar_casos", "/dashboard/casos", "Acceso denegado para editar casos.");
 
@@ -112,6 +179,23 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
   const clients = ((clientsResp.data ?? []) as ClientRow[]) || [];
   const internalUsers = ((internalUsersResp.data ?? []) as InternalUserRow[]) || [];
   const docs = ((docsResp.data ?? []) as CaseDocumentRow[]) || [];
+  const documentCounts = docs.reduce<Record<string, number>>((acc, doc) => {
+    const key = doc.document_type ?? "otro";
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+  const currentClient = clients.find((client) => client.id === caseData?.client_id);
+  const assignedUser = internalUsers.find((user) => user.id === caseData?.assigned_to_user_id);
+  const requiredDocumentSlots = CASE_DOCUMENT_SLOTS.filter((slot) => slot.type !== "otro");
+  const requiredDocumentTypes = requiredDocumentSlots.map((slot) => slot.type);
+  const additionalDocs = docs.filter((doc) => !requiredDocumentTypes.includes(doc.document_type ?? ""));
+  const caseReference = caseData ? caseDisplayReference(caseData) || caseData.title || caseData.case_code || `Caso ${caseData.id.slice(0, 8)}` : "";
+  const folderCounts = {
+    Informes: docs.filter((doc) => doc.document_type === "informe_final" || doc.document_type === "informe_visita").length,
+    Facturación: docs.filter((doc) => doc.document_type === "factura" || doc.document_type === "cotizacion").length,
+    Satisfacción: docs.filter((doc) => doc.document_type === "acta_satisfaccion").length,
+    Otros: additionalDocs.length
+  };
 
   if (!caseData) {
     return (
@@ -125,11 +209,21 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
 
   return (
     <main>
+      <nav className="case-breadcrumb" aria-label="Ruta del caso">
+        <Link href="/dashboard/casos">Casos</Link>
+        <span>/</span>
+        <Link href={`/dashboard/casos/${caseData.id}`}>{caseData.case_code ?? `Caso ${caseData.id.slice(0, 8)}`}</Link>
+        <span>/</span>
+        <span>{caseReference}</span>
+        <span>/</span>
+        <strong>Documentos y edición</strong>
+      </nav>
+
       <div className="page-header">
         <div>
           <h1>Editar caso</h1>
           <p>
-            {caseData.case_code ?? `Caso ${caseData.id.slice(0, 8)}`} | Puedes ajustar todos los datos operativos del caso.
+            Organiza la ruta documental, adjuntos y datos operativos de este caso.
           </p>
         </div>
         <div className="inline-form">
@@ -146,7 +240,33 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
       ) : null}
       {docsResp.error ? <p className="feedback error">No fue posible cargar adjuntos: {docsResp.error.message}</p> : null}
 
+      <div className="case-workspace">
+        <aside className="case-sidebar">
+          <Link href="/dashboard/casos" className="case-back-link">
+            Volver a casos
+          </Link>
+          <div className="case-sidebar-heading">
+            <span>{caseData.case_code ?? `Caso ${caseData.id.slice(0, 8)}`}</span>
+            <strong className="case-status-pill">{caseData.status ?? "sin_estado"}</strong>
+          </div>
+          <h2>{caseReference}</h2>
+          <p>{caseData.flow_type ?? "Sin tipo"}</p>
+          <p>{currentClient?.name ?? "Cliente no encontrado"}</p>
+          <p>Responsable: {assignedUser?.full_name ?? "Pendiente por asignar"}</p>
+
+          <nav className="case-side-nav" aria-label="Secciones del caso">
+            <a href="#datos-caso">Información general</a>
+            <a href="#documentos-caso" className="active">
+              Documentos
+            </a>
+            <a href={`/dashboard/casos/${caseData.id}`}>Resumen</a>
+            <a href="#eliminar-caso">Eliminar</a>
+          </nav>
+        </aside>
+
+        <div className="case-content">
       <section className="card">
+        <div id="datos-caso" />
         <h2>Datos editables del caso</h2>
         <form action={editarCasoAction} className="form-grid">
           <input type="hidden" name="case_id" value={caseData.id} />
@@ -297,75 +417,189 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
         </form>
       </section>
 
-      <section className="card">
-        <h2>Adjuntar documentos o fotos</h2>
-        <p>Sube evidencias, fotos, documentos del cliente o soportes técnicos asociados a este caso.</p>
-        <form action={adjuntarDocumentosCasoAction} className="form-grid">
+      <section className="card case-documents-panel" id="documentos-caso">
+        <div className="document-toolbar">
+          <div>
+            <p className="section-eyebrow">Expediente documental</p>
+            <h2>Documentos del caso</h2>
+            <p>Gestiona, visualiza y descarga la documentación asociada a este caso/proyecto.</p>
+          </div>
+          <div className="document-actions">
+            <button type="button" className="ghost-btn" disabled>
+              Nueva carpeta
+            </button>
+            <a className="primary-action-link" href="#documentos-requeridos">
+              Subir documento
+            </a>
+          </div>
+        </div>
+
+        <div className="document-path">
+          <span>Casos</span>
+          <span>/</span>
+          <span>{caseData.case_code ?? `Caso ${caseData.id.slice(0, 8)}`}</span>
+          <span>/</span>
+          <strong>Documentos</strong>
+        </div>
+
+        <h3>Carpetas</h3>
+        <div className="folder-grid">
+          {Object.entries(folderCounts).map(([folder, count]) => (
+            <div className="folder-card" key={folder}>
+              <div className="folder-icon" aria-hidden="true">
+                Carpeta
+              </div>
+              <div>
+                <strong>{folder}</strong>
+                <p>
+                  {count} {count === 1 ? "documento" : "documentos"}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <h3 id="documentos-requeridos">Documentos requeridos</h3>
+        <div className="table-wrapper">
+          <table className="data-table document-table">
+            <thead>
+              <tr>
+                <th>Documento</th>
+                <th>Descripción</th>
+                <th>Estado</th>
+                <th>Archivo</th>
+                <th>Fecha de carga</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {requiredDocumentSlots.map((slot) => {
+                const doc = docs.find((item) => item.document_type === slot.type);
+                const fileInputId = `case-required-file-${slot.type}`;
+
+                return (
+                  <tr key={slot.type}>
+                    <td>
+                      <strong>{slot.title}</strong>
+                    </td>
+                    <td>{slot.description}</td>
+                    <td>
+                      <span className={doc ? "doc-state doc-state-done" : "doc-state doc-state-pending"}>
+                        {doc ? "Cargado" : "Pendiente"}
+                      </span>
+                    </td>
+                    <td>
+                      {doc ? (
+                        <a href={`/api/case-documents/${doc.id}`} target="_blank" rel="noreferrer">
+                          {doc.original_filename ?? "Ver / descargar"}
+                        </a>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td>{doc ? dateTimeValue(doc.created_at) : "-"}</td>
+                    <td>
+                      {doc ? (
+                        <form action={eliminarDocumentoCasoAction} className="compact-action-form">
+                          <input type="hidden" name="case_id" value={caseData.id} />
+                          <input type="hidden" name="document_id" value={doc.id} />
+                          <button type="submit" className="danger-btn">
+                            Eliminar
+                          </button>
+                        </form>
+                      ) : (
+                        <form action={adjuntarDocumentosCasoAction} className="compact-upload-form">
+                          <input type="hidden" name="case_id" value={caseData.id} />
+                          <input type="hidden" name="case_document_type" value={slot.type} />
+                          <input type="hidden" name="case_document_name" value={slot.title} />
+                          <label className="compact-file-label" htmlFor={fileInputId}>
+                            Seleccionar archivo
+                          </label>
+                          <input
+                            id={fileInputId}
+                            name="case_files"
+                            type="file"
+                            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                            required
+                          />
+                          <button type="submit">Subir</button>
+                        </form>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="document-section-header">
+          <div>
+            <h3>Otros documentos</h3>
+            <p>Documentos adicionales que no estén en los requeridos. Puedes cargar hasta 3 archivos como “Otros”.</p>
+          </div>
+          <strong>{documentCounts.otro ?? 0}/3 usados</strong>
+        </div>
+
+        <form action={adjuntarDocumentosCasoAction} className="other-upload-form">
           <input type="hidden" name="case_id" value={caseData.id} />
-
+          <input type="hidden" name="case_document_type" value="otro" />
           <div className="form-field">
-            <label htmlFor="case-document-type">Tipo de soporte</label>
-            <select id="case-document-type" name="case_document_type" defaultValue="archivo_tecnico">
-              <option value="archivo_tecnico">Evidencia fotográfica / soporte técnico</option>
-              <option value="documento_cliente">Documento del cliente</option>
-              <option value="planos">Plano</option>
-              <option value="presupuesto">Cotización / presupuesto recibido</option>
-              <option value="anexos">Anexo</option>
-              <option value="otro">Otro</option>
-            </select>
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="case-document-name">Nombre visible del soporte (opcional)</label>
-            <input id="case-document-name" name="case_document_name" placeholder="Ej: Fotos visita inicial" />
-          </div>
-
-          <div className="form-field" style={{ gridColumn: "1 / -1" }}>
-            <label htmlFor="case-files">Archivos o fotos</label>
+            <label htmlFor="case-other-document-name">Nombre visible del soporte</label>
             <input
-              id="case-files"
+              id="case-other-document-name"
+              name="case_document_name"
+              placeholder="Ej: registro fotográfico, soporte del cliente, anexo técnico"
+              disabled={(documentCounts.otro ?? 0) >= 3}
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor="case-other-files">Archivos adicionales</label>
+            <input
+              id="case-other-files"
               name="case_files"
               type="file"
               multiple
               accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+              disabled={(documentCounts.otro ?? 0) >= 3}
             />
-            <small>Máximo 20 MB por archivo. Si son muchas fotos, súbelas en grupos pequeños.</small>
           </div>
-
-          <button type="submit">Adjuntar soportes</button>
+          {(documentCounts.otro ?? 0) >= 3 ? (
+            <p className="feedback error">Ya se cargaron los 3 documentos adicionales permitidos.</p>
+          ) : (
+            <button type="submit">Subir otro documento</button>
+          )}
         </form>
 
-        <h3>Adjuntos actuales</h3>
-        {docs.length === 0 ? <p>No hay adjuntos registrados en este caso.</p> : null}
-        {docs.length > 0 ? (
+        {additionalDocs.length > 0 ? (
           <div className="table-wrapper">
-            <table className="data-table">
+            <table className="data-table document-table">
               <thead>
                 <tr>
-                  <th>Fecha</th>
+                  <th>Documento</th>
                   <th>Tipo</th>
-                  <th>Nombre</th>
                   <th>Archivo</th>
-                  <th>Acción</th>
+                  <th>Fecha de carga</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {docs.map((doc) => (
+                {additionalDocs.map((doc) => (
                   <tr key={doc.id}>
-                    <td>{dateTimeValue(doc.created_at)}</td>
-                    <td>{doc.document_type ?? "-"}</td>
-                    <td>{doc.name ?? "-"}</td>
+                    <td>{doc.name ?? doc.original_filename ?? "Documento adicional"}</td>
+                    <td>{documentTypeLabel(doc.document_type)}</td>
                     <td>
                       <a href={`/api/case-documents/${doc.id}`} target="_blank" rel="noreferrer">
                         {doc.original_filename ?? "Ver / descargar"}
                       </a>
                     </td>
+                    <td>{dateTimeValue(doc.created_at)}</td>
                     <td>
-                      <form action={eliminarDocumentoCasoAction}>
+                      <form action={eliminarDocumentoCasoAction} className="compact-action-form">
                         <input type="hidden" name="case_id" value={caseData.id} />
                         <input type="hidden" name="document_id" value={doc.id} />
-                        <button type="submit" style={{ background: "#991b1b", borderColor: "#991b1b" }}>
-                          Eliminar adjunto
+                        <button type="submit" className="danger-btn">
+                          Eliminar
                         </button>
                       </form>
                     </td>
@@ -374,10 +608,14 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
               </tbody>
             </table>
           </div>
-        ) : null}
+        ) : (
+          <p>No hay otros documentos registrados.</p>
+        )}
+
+        <p className="document-footnote">Formatos permitidos: PDF, JPG, PNG, DOC, DOCX, XLS, XLSX, CSV y TXT. Tamaño máximo: 20 MB por archivo.</p>
       </section>
 
-      <section className="card" style={{ borderColor: "#fecaca" }}>
+      <section className="card" id="eliminar-caso" style={{ borderColor: "#fecaca" }}>
         <h2>Eliminar caso</h2>
         <p className="feedback error" style={{ marginBottom: "1rem" }}>
           Esta acción elimina el caso operativo. Úsala solo si el caso fue creado por error.
@@ -389,6 +627,8 @@ export default async function EditarCasoPage({ params, searchParams }: EditarCas
           </button>
         </form>
       </section>
+        </div>
+      </div>
     </main>
   );
 }

@@ -24,6 +24,24 @@ function dateTimeValue(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString("es-CO") : "-";
 }
 
+function documentTypeLabel(value: string | null | undefined) {
+  const labels: Record<string, string> = {
+    factura: "Factura",
+    informe_final: "Informe final",
+    informe_visita: "Informe de visita",
+    cotizacion: "Cotización",
+    acta_satisfaccion: "Acta de satisfacción",
+    otro: "Otros",
+    evidencia_fotografica: "Evidencia fotográfica",
+    soporte_tecnico: "Soporte técnico",
+    documento_cliente: "Documento del cliente",
+    archivo_tecnico: "Archivo técnico",
+    presupuesto: "Presupuesto",
+    cotizacion_recibida: "Cotización recibida"
+  };
+  return value ? labels[value] ?? value : "-";
+}
+
 export default async function CasoDetallePage({ params, searchParams }: CasoDetallePageProps) {
   const permissionContext = await getCurrentUserPermissions();
   const isClientInmobiliaria = permissionContext.normalizedRole === "cliente_inmobiliaria";
@@ -157,7 +175,7 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
                   {docs.map((doc) => (
                     <tr key={doc.id}>
                       <td>{dateTimeValue(doc.created_at)}</td>
-                      <td>{doc.document_type}</td>
+                      <td>{documentTypeLabel(doc.document_type)}</td>
                       <td>{doc.name}</td>
                       <td>
                         <a href={`/api/case-documents/${doc.id}`} target="_blank" rel="noreferrer">
@@ -598,7 +616,7 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
                 {allDocs.map((doc: any) => (
                   <tr key={doc.id}>
                     <td>{dateTimeValue(doc.created_at)}</td>
-                    <td>{doc.document_type}</td>
+                    <td>{documentTypeLabel(doc.document_type)}</td>
                     <td>{doc.name}</td>
                     <td>{doc.file_url ? <a href={doc.file_url}>{doc.original_filename}</a> : doc.original_filename}</td>
                   </tr>

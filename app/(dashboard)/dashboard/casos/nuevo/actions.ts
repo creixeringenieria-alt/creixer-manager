@@ -9,6 +9,14 @@ import { createClient } from "@/lib/supabase/server";
 
 const MAX_CASE_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024;
 const MAX_CASE_ATTACHMENT_SIZE_MB = MAX_CASE_ATTACHMENT_SIZE_BYTES / 1024 / 1024;
+const CASE_DOCUMENT_TYPES = [
+  "factura",
+  "informe_final",
+  "informe_visita",
+  "cotizacion",
+  "acta_satisfaccion",
+  "otro"
+];
 
 function textValue(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -50,26 +58,16 @@ function validateCaseAttachment(file: File) {
 }
 
 function normalizeCaseDocumentType(value: string | null) {
-  const allowed = [
-    "convocatoria",
-    "terminos_referencia",
-    "anexos",
-    "planos",
-    "documento_cliente",
-    "archivo_tecnico",
-    "presupuesto",
-    "contrato",
-    "pliegos",
-    "cronograma_contractual",
-    "especificaciones",
-    "polizas",
-    "licencias",
-    "evidencia_fotografica",
-    "soporte_tecnico",
-    "cotizacion_recibida",
-    "otro"
-  ];
-  return value && allowed.includes(value) ? value : "otro";
+  return value && CASE_DOCUMENT_TYPES.includes(value) ? value : "otro";
+}
+
+function getCaseDocumentLimit(documentType: string) {
+  return documentType === "otro" ? 3 : 1;
+}
+
+function getCaseDocumentLimitLabel(documentType: string) {
+  if (documentType === "otro") return "Otros permite máximo 3 archivos por caso.";
+  return "Este tipo de documento permite máximo 1 archivo por caso.";
 }
 
 async function guardarDocumentosCaso(caseId: string, formData: FormData, uploadedBy: string | null) {
@@ -79,9 +77,14 @@ async function guardarDocumentosCaso(caseId: string, formData: FormData, uploade
   const supabase = createAdminClient() as any;
   const documentType = normalizeCaseDocumentType(textValue(formData, "case_document_type"));
   const customName = textValue(formData, "case_document_name");
+  const validFiles = files.filter((file): file is File => file instanceof File && file.size > 0);
+  const limit = getCaseDocumentLimit(documentType);
 
-  for (const fileEntry of files) {
-    if (!(fileEntry instanceof File) || fileEntry.size === 0) continue;
+  if (validFiles.length > limit) {
+    throw new Error(getCaseDocumentLimitLabel(documentType));
+  }
+
+  for (const fileEntry of validFiles) {
     validateCaseAttachment(fileEntry);
 
     const filename = sanitizeFilename(fileEntry.name || "documento");

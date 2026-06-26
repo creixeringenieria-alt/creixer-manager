@@ -1,10 +1,13 @@
 import Link from "next/link";
 
+import { requireCurrentProfile } from "@/lib/auth/current-profile";
 import { requirePagePermission } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export default async function ConfiguracionPage() {
   await requirePagePermission("editar_casos", "/dashboard", "Acceso denegado a configuración.");
+  const profile = await requireCurrentProfile();
+  const isSuperAdmin = profile.role === "super_admin";
 
   const supabase = createAdminClient();
   const [usersResp, rolesResp, inmobiliariasResp] = await Promise.all([
@@ -39,6 +42,12 @@ export default async function ConfiguracionPage() {
       </section>
 
       <section className="module-grid">
+        {isSuperAdmin ? (
+          <Link className="card" href="/dashboard/configuracion/gerencial">
+            <h2>Configuración gerencial</h2>
+            <p>Consola privada para operación, permisos y análisis con IA.</p>
+          </Link>
+        ) : null}
         <Link className="card" href="/dashboard/configuracion/usuarios">
           <h2>Usuarios</h2>
           <p>Listado base de usuarios autenticados y su rol actual.</p>

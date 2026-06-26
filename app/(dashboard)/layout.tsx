@@ -47,6 +47,7 @@ export default async function DashboardLayout({
             <div className="user-menu-dropdown">
               <Link href="/dashboard/perfil">Mi perfil</Link>
               <Link href="/dashboard/configuracion">Configuración</Link>
+              {isSuperAdmin ? <Link href="/dashboard/configuracion/gerencial">Configuración gerencial</Link> : null}
               <Link href="/dashboard/configuracion/roles-accesos">Roles y accesos</Link>
               <form action={logoutAction}>
                 <button type="submit">Cerrar sesión</button>

@@ -70,7 +70,7 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
     const caseResp = await supabase
       .from("cases")
       .select(
-        "id, case_code, title, description, status, priority, flow_type, service_area, current_stage, internal_client_code, external_property_code, external_case_id, external_case_code, bill_to_assigned_client, billing_observations, created_at, updated_at, client_id, clients!cases_client_id_fkey(id, name, client_type)"
+        "id, case_code, title, description, status, priority, flow_type, service_area, current_stage, internal_client_code, external_property_code, external_case_id, external_case_code, bill_to_assigned_client, billing_observations, billing_client_id, assigned_to_user_id, created_at, updated_at, client_id, clients!cases_client_id_fkey(id, name, client_type)"
       )
       .eq("id", id)
       .maybeSingle();
@@ -99,101 +99,316 @@ export default async function CasoDetallePage({ params, searchParams }: CasoDeta
       }
     }
 
-    const docsResp = await supabase
-      .from("case_documents")
-      .select("id, document_type, name, original_filename, created_at")
-      .eq("case_id", id)
-      .order("created_at", { ascending: false });
+    let relatedCasesQuery = supabase
+      .from("cases")
+      .select("id, case_code, status, flow_type, internal_client_code, external_property_code, created_at")
+      .eq("client_id", caseData.client_id)
+      .neq("id", id)
+      .order("created_at", { ascending: false })
+      .limit(8);
+
+    if (caseData.external_property_code) {
+      relatedCasesQuery = relatedCasesQuery.eq("external_property_code", caseData.external_property_code);
+    }
+
+    const [docsResp, assignedResp, billingClientResp, relatedCasesResp] = await Promise.all([
+      supabase
+        .from("case_documents")
+        .select("id, document_type, name, original_filename, created_at")
+        .eq("case_id", id)
+        .order("created_at", { ascending: false }),
+      caseData.assigned_to_user_id
+        ? supabase.from("profiles").select("id, full_name, role").eq("id", caseData.assigned_to_user_id).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      caseData.billing_client_id
+        ? supabase.from("clients").select("id, name, client_type").eq("id", caseData.billing_client_id).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      relatedCasesQuery
+    ]);
 
     const docs = (docsResp.data ?? []) as any[];
+    const assignedUser = assignedResp.data as any;
+    const billingClient = billingClientResp.data as any;
+    const relatedCases = (relatedCasesResp.data ?? []) as any[];
     const caseReference = [caseData.internal_client_code, caseData.external_property_code, caseData.external_case_id, caseData.external_case_code]
       .filter(Boolean)
       .join(" | ");
+    const caseCode = caseData.case_code ?? `Caso ${id.slice(0, 8)}`;
+    const displayReference = caseReference || caseData.title || caseCode;
+    const actaDocs = docs.filter((doc) => doc.document_type === "acta_satisfaccion");
+    const quotationDocs = docs.filter((doc) => doc.document_type === "cotizacion");
+    const invoiceDocs = docs.filter((doc) => doc.document_type === "factura");
 
     return (
       <main>
-        <div className="page-header">
-          <div>
-            <h1>Expediente único de caso</h1>
-            <p>
-              {caseData.case_code ?? `Caso ${id.slice(0, 8)}`} | Estado: <strong>{caseData.status ?? "-"}</strong>
-            </p>
-          </div>
-          <div className="inline-form">
-            <Link href="/dashboard/casos">Volver a casos</Link>
-            {canEditCases ? <Link href={`/dashboard/casos/${caseData.id}/editar`}>Editar caso</Link> : null}
-            {!isClientInmobiliaria ? <Link href="/dashboard/casos/nuevo">Crear otro caso</Link> : null}
+        <nav className="case-breadcrumb" aria-label="Ruta del caso">
+          <Link href="/dashboard/casos">Casos</Link>
+          <span>/</span>
+          <span>{caseCode}</span>
+          <span>/</span>
+          <strong>Expediente</strong>
+        </nav>
+
+        {query.error ? <p className="feedback error">{query.error}</p> : null}
+        {query.ok ? <p className="feedback success">{query.ok}</p> : null}
+        {docsResp.error ? <p className="feedback error">No se pudieron cargar documentos: {docsResp.error.message}</p> : null}
+        {relatedCasesResp.error ? (
+          <p className="feedback error">No se pudo cargar historial relacionado: {relatedCasesResp.error.message}</p>
+        ) : null}
+
+        <div className="case-workspace">
+          <aside className="case-sidebar">
+            <Link href="/dashboard/casos" className="case-back-link">
+              Volver a casos
+            </Link>
+            <div className="case-sidebar-heading">
+              <span>{caseCode}</span>
+              <strong className="case-status-pill">{caseData.status ?? "sin_estado"}</strong>
+            </div>
+            <h2>{displayReference}</h2>
+            <p>{caseData.flow_type ?? "Sin tipo"}</p>
+            <p>{caseClient?.name ?? "Cliente no encontrado"}</p>
+
+            <nav className="case-side-nav" aria-label="Secciones del expediente">
+              <a href="#resumen" className="active">
+                Resumen
+              </a>
+              <a href="#informacion-general">Información general</a>
+              <a href="#actividades">Actividades</a>
+              <a href="#cotizacion">Cotización</a>
+              <a href="#facturacion">Facturación</a>
+              <a href="#acta-satisfaccion">Acta de satisfacción</a>
+              <a href="#documentacion">Documentación</a>
+              <a href="#notas">Notas</a>
+              <a href="#historial">Historial</a>
+            </nav>
+          </aside>
+
+          <div className="case-content">
+            <div className="page-header">
+              <div>
+                <h1>Expediente único de caso</h1>
+                <p>Ruta completa del caso desde el ingreso hasta documentos, comercial, facturación e historial.</p>
+              </div>
+              <div className="inline-form">
+                {canEditCases ? <Link href={`/dashboard/casos/${caseData.id}/editar`}>Editar caso</Link> : null}
+                {!isClientInmobiliaria ? <Link href="/dashboard/casos/nuevo">Crear otro caso</Link> : null}
+              </div>
+            </div>
+
+            <section className="card" id="resumen">
+              <h2 style={{ marginTop: 0 }}>Resumen</h2>
+              <div className="module-grid">
+                <article>
+                  <strong>Código</strong>
+                  <p>{caseCode}</p>
+                </article>
+                <article>
+                  <strong>Cliente / inmobiliaria</strong>
+                  <p>
+                    {caseClient?.name ?? "-"}
+                    {caseClient?.client_type ? ` (${caseClient.client_type})` : ""}
+                  </p>
+                </article>
+                <article>
+                  <strong>Estado</strong>
+                  <p>{caseData.status ?? "-"}</p>
+                </article>
+                <article>
+                  <strong>Responsable</strong>
+                  <p>{assignedUser?.full_name ?? "Pendiente por asignar"}</p>
+                </article>
+              </div>
+            </section>
+
+            <section className="card" id="informacion-general">
+              <h2>Información general</h2>
+              <p>
+                Tipo: <strong>{caseData.flow_type ?? "-"}</strong> | Requerimiento:{" "}
+                <strong>{caseData.service_area ?? "-"}</strong> | Prioridad: <strong>{caseData.priority ?? "-"}</strong>
+              </p>
+              <p>
+                Referencia cliente: <strong>{caseReference || "-"}</strong>
+              </p>
+              <p>
+                Etapa operativa: <strong>{caseData.current_stage ?? "-"}</strong> | Creado:{" "}
+                <strong>{dateTimeValue(caseData.created_at)}</strong> | Actualizado:{" "}
+                <strong>{dateTimeValue(caseData.updated_at)}</strong>
+              </p>
+              <h3>Descripción / diagnóstico inicial</h3>
+              <p>{caseData.description ?? "Sin descripción registrada."}</p>
+            </section>
+
+            <section className="card" id="actividades">
+              <h2>Actividades</h2>
+              <p>
+                Responsable actual: <strong>{assignedUser?.full_name ?? "Pendiente por asignar"}</strong>
+                {assignedUser?.role ? ` (${assignedUser.role})` : ""}
+              </p>
+              <p>
+                La agenda, visitas y actividades operativas asociadas a este caso quedarán consolidadas aquí.
+              </p>
+            </section>
+
+            <section className="card" id="cotizacion">
+              <h2>Cotización</h2>
+              {quotationDocs.length > 0 ? (
+                <ul>
+                  {quotationDocs.map((doc) => (
+                    <li key={doc.id}>
+                      <a href={`/api/case-documents/${doc.id}`} target="_blank" rel="noreferrer">
+                        {doc.name || doc.original_filename || "Cotización"}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>Este caso todavía no tiene cotización adjunta.</p>
+              )}
+            </section>
+
+            <section className="card" id="facturacion">
+              <h2>Facturación</h2>
+              <p>
+                Facturación inicial:{" "}
+                <strong>{caseData.bill_to_assigned_client === false ? "Otro / por definir" : "Cliente asignado"}</strong>
+              </p>
+              <p>
+                Cliente a facturar: <strong>{billingClient?.name ?? caseClient?.name ?? "Por definir"}</strong>
+              </p>
+              {caseData.billing_observations ? <p>{caseData.billing_observations}</p> : null}
+              {invoiceDocs.length > 0 ? (
+                <ul>
+                  {invoiceDocs.map((doc) => (
+                    <li key={doc.id}>
+                      <a href={`/api/case-documents/${doc.id}`} target="_blank" rel="noreferrer">
+                        {doc.name || doc.original_filename || "Factura"}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>Sin factura adjunta.</p>
+              )}
+            </section>
+
+            <section className="card" id="acta-satisfaccion">
+              <h2>Acta de satisfacción</h2>
+              {actaDocs.length > 0 ? (
+                <ul>
+                  {actaDocs.map((doc) => (
+                    <li key={doc.id}>
+                      <a href={`/api/case-documents/${doc.id}`} target="_blank" rel="noreferrer">
+                        {doc.name || doc.original_filename || "Acta de satisfacción"}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>Sin acta de satisfacción adjunta.</p>
+              )}
+            </section>
+
+            <section className="card case-documents-panel" id="documentacion">
+              <div className="document-toolbar">
+                <div>
+                  <p className="section-eyebrow">Expediente documental</p>
+                  <h2>Documentación</h2>
+                  <p>Documentos, fotos, cotizaciones, facturas, informes y soportes del caso.</p>
+                </div>
+                {canEditCases ? (
+                  <div className="document-actions">
+                    <Link className="primary-action-link" href={`/dashboard/casos/${caseData.id}/editar#documentos-caso`}>
+                      Adjuntar documentos
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="document-path">
+                <span>Casos</span>
+                <span>/</span>
+                <span>{caseCode}</span>
+                <span>/</span>
+                <strong>Documentación</strong>
+              </div>
+
+              {docs.length === 0 ? <p>No hay documentos adjuntos en este caso.</p> : null}
+              {docs.length > 0 ? (
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Tipo</th>
+                        <th>Nombre</th>
+                        <th>Archivo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {docs.map((doc) => (
+                        <tr key={doc.id}>
+                          <td>{dateTimeValue(doc.created_at)}</td>
+                          <td>{documentTypeLabel(doc.document_type)}</td>
+                          <td>{doc.name}</td>
+                          <td>
+                            <a href={`/api/case-documents/${doc.id}`} target="_blank" rel="noreferrer">
+                              {doc.original_filename ?? "Ver / descargar"}
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </section>
+
+            <section className="card" id="notas">
+              <h2>Notas</h2>
+              <p>{caseData.billing_observations || "Sin notas registradas."}</p>
+            </section>
+
+            <section className="card" id="historial">
+              <h2>Historial</h2>
+              <p>
+                Creado: <strong>{dateTimeValue(caseData.created_at)}</strong> | Última actualización:{" "}
+                <strong>{dateTimeValue(caseData.updated_at)}</strong>
+              </p>
+              <h3>Casos relacionados</h3>
+              {relatedCases.length === 0 ? (
+                <p>No se encontraron otros casos relacionados para este inmueble o cliente.</p>
+              ) : (
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Código</th>
+                        <th>Referencia</th>
+                        <th>Tipo</th>
+                        <th>Estado</th>
+                        <th>Creado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {relatedCases.map((related) => (
+                        <tr key={related.id}>
+                          <td>
+                            <Link href={`/dashboard/casos/${related.id}`}>{related.case_code ?? related.id.slice(0, 8)}</Link>
+                          </td>
+                          <td>{[related.internal_client_code, related.external_property_code].filter(Boolean).join(" | ") || "-"}</td>
+                          <td>{related.flow_type ?? "-"}</td>
+                          <td>{related.status ?? "-"}</td>
+                          <td>{dateValue(related.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
           </div>
         </div>
-
-        {docsResp.error ? <p className="feedback error">No se pudieron cargar documentos: {docsResp.error.message}</p> : null}
-
-        <section className="card">
-          <h2 style={{ marginTop: 0 }}>Resumen</h2>
-          <p>
-            Cliente: <strong>{caseClient?.name ?? "-"}</strong>
-            {caseClient?.client_type ? ` (${caseClient.client_type})` : ""}
-          </p>
-          <p>
-            Tipo: <strong>{caseData.flow_type ?? "-"}</strong> | Requerimiento: <strong>{caseData.service_area ?? "-"}</strong> |
-            Prioridad: <strong>{caseData.priority ?? "-"}</strong>
-          </p>
-          <p>
-            Referencia cliente: <strong>{caseReference || "-"}</strong>
-          </p>
-          <p>
-            Etapa operativa: <strong>{caseData.current_stage ?? "-"}</strong> | Creado:{" "}
-            <strong>{dateTimeValue(caseData.created_at)}</strong>
-          </p>
-          <p>
-            Facturación:{" "}
-            <strong>{caseData.bill_to_assigned_client === false ? "Otro / por definir" : "Cliente asignado"}</strong>
-            {caseData.billing_observations ? ` | ${caseData.billing_observations}` : ""}
-          </p>
-        </section>
-
-        <section className="card" id="diagnostico">
-          <h2>Descripción / diagnóstico inicial</h2>
-          <p>{caseData.description ?? "Sin descripción registrada."}</p>
-        </section>
-
-        <section className="card" id="fotos-documentos">
-          <h2>Fotos / documentos</h2>
-          {docs.length === 0 ? <p>No hay documentos adjuntos en este caso.</p> : null}
-          {docs.length > 0 ? (
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Tipo</th>
-                    <th>Nombre</th>
-                    <th>Archivo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {docs.map((doc) => (
-                    <tr key={doc.id}>
-                      <td>{dateTimeValue(doc.created_at)}</td>
-                      <td>{documentTypeLabel(doc.document_type)}</td>
-                      <td>{doc.name}</td>
-                      <td>
-                        <a href={`/api/case-documents/${doc.id}`} target="_blank" rel="noreferrer">
-                          {doc.original_filename ?? "Ver / descargar"}
-                        </a>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </section>
-
-        <section className="card" id="financiero">
-          <h2>Finanzas</h2>
-          <p>Este caso todavía no tiene ficha financiera detallada. Estado comercial inicial: sin_cotizacion.</p>
-        </section>
       </main>
     );
   }

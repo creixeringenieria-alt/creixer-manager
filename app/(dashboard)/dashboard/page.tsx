@@ -17,6 +17,7 @@ interface SupabaseQueryResult<T = any> {
 }
 
 const CLOSED_TASK_STATUSES = new Set(["completada", "finalizada", "cerrada", "cancelada"]);
+const CLOSED_CASE_STATUSES = new Set(["cerrado", "cerrada", "finalizado", "finalizada", "cancelado", "cancelada", "eliminado"]);
 
 function currency(value: number) {
   return value.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -83,7 +84,19 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     try {
       const supabase = createAdminClient();
       console.info("[dashboard] loading executive kpis");
-      const [financialResp, overdueAgendaResp, visitasHoyResp, cotizacionesResp, ordenesResp, facturasResp, casosResp, agendaResp, projectsResp, overdueTasksResp] =
+      const [
+        financialResp,
+        overdueAgendaResp,
+        visitasHoyResp,
+        cotizacionesResp,
+        ordenesResp,
+        facturasResp,
+        operationalCasesResp,
+        casosResp,
+        agendaResp,
+        projectsResp,
+        overdueTasksResp
+      ] =
         await Promise.all([
           supabase
             .from("financial_records")
@@ -112,6 +125,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             .select("id", { count: "exact", head: true })
             .in("status", ["programada", "en_progreso"]),
           supabase.from("invoices").select("id, amount_pending, status").gt("amount_pending", 0),
+          supabase
+            .from("cases")
+            .select(
+              "id, case_code, title, status, current_stage, flow_type, service_area, created_at, updated_at, clients!cases_client_id_fkey(name)"
+            )
+            .order("created_at", { ascending: false })
+            .limit(12),
           supabase
             .from("financial_records")
             .select(
@@ -168,6 +188,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         { name: "cotizaciones_rows", result: cotizacionesResp as SupabaseQueryResult },
         { name: "ordenes_en_ejecucion_count", result: ordenesResp as SupabaseQueryResult },
         { name: "facturas_pendientes_rows", result: facturasResp as SupabaseQueryResult },
+        { name: "casos_operativos_rows", result: operationalCasesResp as SupabaseQueryResult },
         { name: "casos_recientes_rows", result: casosResp as SupabaseQueryResult },
         { name: "agenda_hoy_rows", result: agendaResp as SupabaseQueryResult },
         { name: "agenda_tecnicos_rows", result: tecnicosResp as SupabaseQueryResult },
@@ -192,6 +213,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       }
 
       const financialRows = financialResp.data ?? [];
+      const operationalCaseRows = operationalCasesResp.data ?? [];
       const projects = projectsResp.data ?? [];
       const overdueTaskRows = (overdueTasksResp.data ?? []).filter(
         (row: any) => !CLOSED_TASK_STATUSES.has(String(row.status ?? "").toLowerCase())
@@ -208,6 +230,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
       const cartera = financialRows.reduce((sum: number, row: any) => sum + Number(row.saldo_por_cobrar ?? 0), 0);
       const abiertos = financialRows.filter((row: any) => row.estado_financiero !== "cerrado").length;
+      const operationalOpen = operationalCaseRows.filter(
+        (row: any) => !CLOSED_CASE_STATUSES.has(String(row.status ?? "").toLowerCase())
+      ).length;
       const criticos = projects.filter((project: any) => {
         const overdueCount = overdueByProject[project.id] ?? 0;
         const vencido = typeof project.planned_end_date === "string" && project.planned_end_date < todayDate;
@@ -220,7 +245,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       }).length;
 
       kpis = {
-        casosAbiertos: abiertos,
+        casosAbiertos: abiertos + operationalOpen,
         casosVencidos: (overdueAgendaResp.count ?? 0) + overdueTaskRows.length,
         visitasHoy: visitasHoyResp.count ?? 0,
         cotizacionesPendientes,
@@ -230,7 +255,20 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         proyectosCriticos: criticos.length
       };
 
-      casosRecientes = (casosResp.data ?? []).map((row: any) => ({
+      const casosOperativosRecientes = operationalCaseRows.map((row: any) => {
+        const client = Array.isArray(row.clients) ? row.clients[0] : row.clients;
+        return {
+          id: row.id,
+          nombre: row.case_code ?? row.title ?? row.id,
+          tipo: row.flow_type ?? row.service_area ?? "caso",
+          estado: row.status ?? row.current_stage ?? "-",
+          valor: 0,
+          updated_at: row.updated_at ?? row.created_at,
+          cliente: client?.name ?? "-"
+        };
+      });
+
+      const casosFinancierosRecientes = (casosResp.data ?? []).map((row: any) => ({
         id: row.id,
         nombre:
           (row.requerimientos as { codigo_requerimiento?: string } | null)?.codigo_requerimiento ??
@@ -239,8 +277,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         tipo: row.case_type,
         estado: row.estado_financiero,
         valor: Number(row.valor_aprobado ?? 0),
-        updated_at: row.updated_at
+        updated_at: row.updated_at,
+        cliente: "-"
       }));
+
+      casosRecientes = [...casosOperativosRecientes, ...casosFinancierosRecientes]
+        .sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")))
+        .slice(0, 8);
 
       agendaHoy = agendaRows.map((row: any) => ({
         id: row.id,
